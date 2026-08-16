@@ -1,6 +1,6 @@
 # Medical AI Diagnostic Platform
 
-## Vision
+## Plan
 
 A production-grade clinical decision support platform that enables healthcare professionals to upload medical scans, receive AI-assisted predictions, visualize explainability heatmaps, generate clinical summaries, and prioritize cases based on severity.
 
