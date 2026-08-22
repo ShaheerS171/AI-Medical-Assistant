@@ -8,12 +8,15 @@ from PIL import Image
 from knee_model.src.inference import KneeOAPredictor
 from knee_model.src.gradcam import run_gradcam as knee_gradcam
 from tumor_model.src.inference import BrainTumorPredictor
+from explainability.mistral_engine import MedicalExplainerAPI
 
 models_pipeline = {}
+explainer = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    global explainer
     models_pipeline["knee"] = KneeOAPredictor(
         checkpoint_path="knee_model/models/knee_ordinal_best.pth",
         metadata_path="knee_model/run_metadata.json"
@@ -22,6 +25,9 @@ async def lifespan(app: FastAPI):
         yolo_path="tumor_model/modelfiles/tumorbestyolo.pt",
         cls_path="tumor_model/modelfiles/MRIb3.pth"
     )
+    # Initialize the Grok explanation engine using the .env file API key
+    explainer = MedicalExplainerAPI()
+    
     yield
     models_pipeline.clear()
 
@@ -71,6 +77,23 @@ def knee_explain(file: UploadFile = File(...)):
     return Response(content=buf.getvalue(), media_type="image/jpeg")
 
 
+@app.post("/knee/explain-report")
+def knee_explain_report(file: UploadFile = File(...)):
+    image = read_image(file)
+    predictor = models_pipeline["knee"]
+    res = predictor.predict(image)
+    
+    report = explainer.generate_knee_report(
+        predicted_grade=res["predicted_grade"],
+        confidence=res.get("confidence", 0.0)
+    )
+    
+    return {
+        "metrics": res,
+        "report": report
+    }
+
+
 # -----------------------------------------------------------------------------
 # Brain Tumor Endpoints
 # -----------------------------------------------------------------------------
@@ -111,3 +134,26 @@ def brain_detection(file: UploadFile = File(...)):
     buf = io.BytesIO()
     det_img.save(buf, format="JPEG")
     return Response(content=buf.getvalue(), media_type="image/jpeg")
+
+
+@app.post("/brain/explain-report")
+def brain_explain_report(file: UploadFile = File(...)):
+    image = read_image(file)
+    res = models_pipeline["brain"].predict(image)
+    
+    report = explainer.generate_tumor_report(
+        predicted_class=res["predicted_class"],
+        confidence=res["confidence"],
+        area_mm2=res["tumor_area_mm2"],
+        area_cm2=res["tumor_area_cm2"]
+    )
+    
+    return {
+        "metrics": {
+            "predicted_class": res["predicted_class"],
+            "confidence": res["confidence"],
+            "tumor_area_mm2": res["tumor_area_mm2"],
+            "tumor_area_cm2": res["tumor_area_cm2"]
+        },
+        "report": report
+    }

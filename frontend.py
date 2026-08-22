@@ -23,14 +23,15 @@ with tab_knee:
         image = Image.open(uploaded_knee).convert("RGB")
         col1.image(image, caption="Uploaded X-Ray", use_container_width=True)
         
-        if col1.button("Run Knee Assessment"):
+        if col1.button("Run Knee Assessment & Report"):
             uploaded_knee.seek(0)
             file_bytes = uploaded_knee.read()
             files = {"file": (uploaded_knee.name, file_bytes, uploaded_knee.type)}
             
-            with st.spinner("Evaluating Radiograph..."):
+            with st.spinner("Evaluating Radiograph & Querying Explanation Engine..."):
                 res = requests.post(f"{API_URL}/knee/predict", files=files)
                 exp_res = requests.post(f"{API_URL}/knee/explain", files={"file": (uploaded_knee.name, file_bytes, uploaded_knee.type)})
+                report_res = requests.post(f"{API_URL}/knee/explain-report", files={"file": (uploaded_knee.name, file_bytes, uploaded_knee.type)})
             
             if res.status_code == 200:
                 data = res.json()
@@ -46,6 +47,11 @@ with tab_knee:
                     overlay_img = Image.open(io.BytesIO(exp_res.content))
                     col2.image(overlay_img, caption="Grad-CAM Attention Map", use_container_width=True)
 
+            if report_res.status_code == 200:
+                st.markdown("---")
+                st.markdown("### 📋 Automated Clinical Assessment Report")
+                st.info(report_res.json()["report"])
+
 # -----------------------------------------------------------------------------
 # TAB 2: Brain Tumor Detection & Area Measurement
 # -----------------------------------------------------------------------------
@@ -58,15 +64,16 @@ with tab_brain:
         image = Image.open(uploaded_brain).convert("RGB")
         col1.image(image, caption="Uploaded Brain MRI", use_container_width=True)
         
-        if st.button("Run Brain MRI Analysis"):
+        if st.button("Run Brain MRI Analysis & Report"):
             uploaded_brain.seek(0)
             file_bytes = uploaded_brain.read()
             files = {"file": (uploaded_brain.name, file_bytes, uploaded_brain.type)}
             
-            with st.spinner("Processing MRI Scan..."):
+            with st.spinner("Processing MRI Scan & Querying Explanation Engine..."):
                 res = requests.post(f"{API_URL}/brain/predict", files=files)
                 cam_res = requests.post(f"{API_URL}/brain/explain-cam", files={"file": (uploaded_brain.name, file_bytes, uploaded_brain.type)})
                 det_res = requests.post(f"{API_URL}/brain/explain-detection", files={"file": (uploaded_brain.name, file_bytes, uploaded_brain.type)})
+                report_res = requests.post(f"{API_URL}/brain/explain-report", files={"file": (uploaded_brain.name, file_bytes, uploaded_brain.type)})
             
             if res.status_code == 200:
                 data = res.json()
@@ -84,3 +91,8 @@ with tab_brain:
                     col2.image(Image.open(io.BytesIO(cam_res.content)), caption="Classifier Grad-CAM Focus", use_container_width=True)
                 if det_res.status_code == 200:
                     col3.image(Image.open(io.BytesIO(det_res.content)), caption="YOLO Bounding Box Localization", use_container_width=True)
+
+            if report_res.status_code == 200:
+                st.markdown("---")
+                st.markdown("### 📋 Automated Clinical Assessment Report")
+                st.info(report_res.json()["report"])

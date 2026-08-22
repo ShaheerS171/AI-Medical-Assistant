@@ -1,0 +1,56 @@
+# Environment variables & secrets
+.env
+.env.local
+.env.*.local
+
+# Python artifacts & virtual environments
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.python-version
+
+# Virtual Environments
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+.venv/
+conda-meta/
+
+# Anaconda / Miniconda / Mamba local files
+*.conda
+*.tar.bz2
+
+# Model weights & large datasets (Keep git repos lightweight)
+*.pt
+*.pth
+*.onnx
+*.safetensors
+*.bin
+*.h5
+*.hdf5
+*.pkl
+*.joblib
+models/*.pt
+weights/
+runs/
+datasets/
+
+# IDE / Text Editor settings
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Streamlit temporary data
+.streamlit/secrets.toml
+
+# FastAPI / Uvicorn / Log files
+*.log
+logs/
