@@ -28,19 +28,24 @@ from typing import Optional
 
 import requests
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-def get_mistral_api_key():
+load_dotenv()
+
+
+def get_mistral_api_key(custom_key: Optional[str] = None):
+    if custom_key and custom_key.strip():
+        return custom_key.strip()
     key = os.getenv("MISTRAL_API_KEY")
-    if not key or key == "your_mistral_api_key_here":
+    if not key or key.strip() in ("", "your_mistral_api_key_here"):
         try:
             import streamlit as st
             key = st.secrets.get("MISTRAL_API_KEY")
         except Exception:
             pass
-    return key
+    return key.strip() if key else None
 
 
 MISTRAL_CHAT_URL = "https://api.mistral.ai/v1/chat/completions"
@@ -105,8 +110,12 @@ class DoctorSearchResponse(BaseModel):
     results: list[Doctor]
 
 
-def _mistral_headers() -> dict:
-    key = get_mistral_api_key()
+def _mistral_headers(custom_key: Optional[str] = None) -> dict:
+    key = get_mistral_api_key(custom_key)
+    if not key:
+        raise ValueError(
+            "Mistral API Key is missing. Please enter your free API key from https://console.mistral.ai/ in the sidebar or .env file."
+        )
     return {
         "Authorization": f"Bearer {key}",
         "Content-Type": "application/json",
@@ -133,7 +142,7 @@ def _extract_json(raw_text: str) -> dict:
     }
 
 
-def _ocr_pdf(b64_data: str) -> str:
+def _ocr_pdf(b64_data: str, custom_key: Optional[str] = None) -> str:
     """Use Mistral's OCR endpoint to extract text from a base64-encoded PDF."""
     payload = {
         "model": "mistral-ocr-latest",
@@ -142,14 +151,19 @@ def _ocr_pdf(b64_data: str) -> str:
             "document_url": f"data:application/pdf;base64,{b64_data}",
         },
     }
-    resp = requests.post(MISTRAL_OCR_URL, headers=_mistral_headers(), json=payload, timeout=60)
+    resp = requests.post(MISTRAL_OCR_URL, headers=_mistral_headers(custom_key), json=payload, timeout=60)
     resp.raise_for_status()
     data = resp.json()
     pages = data.get("pages", [])
     return "\n".join(p.get("markdown", "") for p in pages).strip()
 
 
-def run_consult_logic(symptoms: str = "", file_bytes: Optional[bytes] = None, content_type: str = "") -> dict:
+def run_consult_logic(
+    symptoms: str = "",
+    file_bytes: Optional[bytes] = None,
+    content_type: str = "",
+    api_key: Optional[str] = None,
+) -> dict:
     if not symptoms and not file_bytes:
         raise ValueError("Provide symptoms text, an uploaded report, or both.")
 
@@ -165,9 +179,14 @@ def run_consult_logic(symptoms: str = "", file_bytes: Optional[bytes] = None, co
 
         if "pdf" in ctype:
             try:
-                extracted_text = _ocr_pdf(b64_data)
+                extracted_text = _ocr_pdf(b64_data, custom_key=api_key)
+            except ValueError as ve:
+                raise RuntimeError(str(ve))
             except requests.RequestException as e:
-                raise RuntimeError(f"OCR request failed: {e}")
+                detail = e.response.text if getattr(e, "response", None) is not None else str(e)
+                if getattr(e, "response", None) and e.response.status_code in (401, 403):
+                    raise RuntimeError("Invalid or unauthorized Mistral API Key. Please get a free API key at https://console.mistral.ai/")
+                raise RuntimeError(f"OCR request failed: {detail}")
             text_prompt += f"Extracted report text:\n{extracted_text}\n\n"
         elif "image" in ctype or any(ext in ctype for ext in ["png", "jpg", "jpeg"]):
             image_data_uri = f"data:{ctype or 'image/jpeg'};base64,{b64_data}"
@@ -199,10 +218,17 @@ def run_consult_logic(symptoms: str = "", file_bytes: Optional[bytes] = None, co
     }
 
     try:
-        resp = requests.post(MISTRAL_CHAT_URL, headers=_mistral_headers(), json=payload, timeout=60)
+        headers = _mistral_headers(api_key)
+        resp = requests.post(MISTRAL_CHAT_URL, headers=headers, json=payload, timeout=60)
         resp.raise_for_status()
+    except ValueError as ve:
+        raise RuntimeError(str(ve))
     except requests.RequestException as e:
         detail = e.response.text if getattr(e, "response", None) is not None else str(e)
+        if (getattr(e, "response", None) and e.response.status_code in (401, 403)) or "Invalid API Key" in detail:
+            raise RuntimeError(
+                "Invalid or missing Mistral API Key. Please get a free API key from https://console.mistral.ai/ and enter it in the app sidebar or .env file."
+            )
         raise RuntimeError(f"Mistral API error: {detail}")
 
     data = resp.json()
@@ -221,6 +247,8 @@ def run_consult_logic(symptoms: str = "", file_bytes: Optional[bytes] = None, co
 async def consult(
     symptoms: str = Form(""),
     file: Optional[UploadFile] = File(None),
+    api_key: Optional[str] = Form(None),
+    x_api_key: Optional[str] = Header(None, alias="X-Mistral-Api-Key"),
 ):
     """Role 1: Medical consultant. Symptoms text and/or an uploaded report are optional
     individually, but at least one of them must be provided."""
@@ -239,8 +267,10 @@ async def consult(
             raise HTTPException(status_code=400, detail="Uploaded file is empty.")
         content_type = file.content_type or ""
 
+    effective_key = api_key or x_api_key
+
     try:
-        res = run_consult_logic(symptoms, file_bytes, content_type)
+        res = run_consult_logic(symptoms, file_bytes, content_type, api_key=effective_key)
         return ConsultResponse(**res)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
