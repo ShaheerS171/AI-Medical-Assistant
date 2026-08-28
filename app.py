@@ -1,38 +1,35 @@
+"""
+app.py - Unified FastAPI Backend for AI Medical Assistant
+
+Exposes endpoints for:
+  1. Diagnostic Vision Models (/predict/brain-mri, /predict/knee-xray)
+  2. Report Generation & PDF Exports (/generate/report, /export/pdf)
+  3. Chatbot Consultation (/consult)
+  4. LocationIQ Doctor & Facility Locator (/find-doctors)
+
+Run with:
+    uvicorn app:app --reload --port 8000
+"""
+
 import io
-from contextlib import asynccontextmanager
-from fastapi import FastAPI, File, HTTPException, UploadFile
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response
+import os
+from typing import Optional, List, Dict, Any
 from PIL import Image
 
+from fastapi import FastAPI, File, Form, Header, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
+
+# Internal module imports
 from knee_model.src.inference import KneeOAPredictor
-from knee_model.src.gradcam import run_gradcam as knee_gradcam
+from knee_model.src.gradcam import run_gradcam
 from tumor_model.src.inference import BrainTumorPredictor
 from explainability.mistral_engine import MedicalExplainerAPI
+from explainability.pdf_generator import MedicalReportPDFGenerator
+from chatbot.engine import run_consult_logic, find_doctors_logic
 
-models_pipeline = {}
-explainer = None
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    global explainer
-    models_pipeline["knee"] = KneeOAPredictor(
-        checkpoint_path="knee_model/models/knee_ordinal_best.pth",
-        metadata_path="knee_model/run_metadata.json"
-    )
-    models_pipeline["brain"] = BrainTumorPredictor(
-        yolo_path="tumor_model/modelfiles/tumorbestyolo.pt",
-        cls_path="tumor_model/modelfiles/MRIb3.pth"
-    )
-    # Initialize the Grok explanation engine using the .env file API key
-    explainer = MedicalExplainerAPI()
-    
-    yield
-    models_pipeline.clear()
-
-
-app = FastAPI(title="Unified Medical AI Assistant API", version="2.0.0", lifespan=lifespan)
+app = FastAPI(title="AI Medical Assistant Unified API")
 
 app.add_middleware(
     CORSMiddleware,
@@ -42,118 +39,185 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ---------------------------------------------------------------------------
+# Lazy-loaded Predictors & Engines
+# ---------------------------------------------------------------------------
+_knee_predictor: Optional[KneeOAPredictor] = None
+_tumor_predictor: Optional[BrainTumorPredictor] = None
+_explainer_api: Optional[MedicalExplainerAPI] = None
+_pdf_generator: Optional[MedicalReportPDFGenerator] = None
 
-def read_image(file: UploadFile) -> Image.Image:
-    try:
-        contents = file.file.read()
-        return Image.open(io.BytesIO(contents)).convert("RGB")
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Invalid image file: {str(e)}")
 
+def get_knee_predictor() -> KneeOAPredictor:
+    global _knee_predictor
+    if _knee_predictor is None:
+        _knee_predictor = KneeOAPredictor(
+            checkpoint_path="knee_model/models/knee_ordinal_best.pth",
+            metadata_path="knee_model/run_metadata.json"
+        )
+    return _knee_predictor
+
+
+def get_tumor_predictor() -> BrainTumorPredictor:
+    global _tumor_predictor
+    if _tumor_predictor is None:
+        _tumor_predictor = BrainTumorPredictor(
+            yolo_path="tumor_model/modelfiles/tumorbestyolo.pt",
+            cls_path="tumor_model/modelfiles/MRIb3.pth"
+        )
+    return _tumor_predictor
+
+
+def get_explainer_api() -> MedicalExplainerAPI:
+    global _explainer_api
+    if _explainer_api is None:
+        _explainer_api = MedicalExplainerAPI()
+    return _explainer_api
+
+
+def get_pdf_generator() -> MedicalReportPDFGenerator:
+    global _pdf_generator
+    if _pdf_generator is None:
+        _pdf_generator = MedicalReportPDFGenerator()
+    return _pdf_generator
+
+
+# ---------------------------------------------------------------------------
+# Pydantic Schemas
+# ---------------------------------------------------------------------------
+class PatientInfo(BaseModel):
+    name: str = "Jane Doe"
+    id: str = "PAT-001"
+    age: int = 45
+    sex: str = "Female"
+    history: str = "No prior history provided."
+
+
+class BrainMRIPredictionResponse(BaseModel):
+    predicted_class: str
+    confidence: float
+    tumor_area_mm2: Optional[float] = None
+    tumor_area_cm2: Optional[float] = None
+
+
+class KneeXRayPredictionResponse(BaseModel):
+    predicted_grade: int
+    confidence: float
+    calibrated: bool
+
+
+class ConsultResponse(BaseModel):
+    advice: str
+    urgency: str
+    recommended_specialist: Optional[str] = None
+    disclaimer: str
+
+
+class Doctor(BaseModel):
+    name: str
+    address: Optional[str] = None
+    distance_km: Optional[float] = None
+    lat: Optional[float] = None
+    lon: Optional[float] = None
+
+
+class DoctorSearchResponse(BaseModel):
+    results: List[Doctor]
+
+
+# ---------------------------------------------------------------------------
+# System Endpoints
+# ---------------------------------------------------------------------------
 
 @app.get("/")
-def root():
-    return {"status": "online", "message": "Unified Medical AI Assistant API Operational"}
+def home():
+    return {"message": "Welcome to the AI-Medical Assistant Platform"}
 
 
-# -----------------------------------------------------------------------------
-# Knee Osteoarthritis Endpoints
-# -----------------------------------------------------------------------------
-@app.post("/knee/predict")
-def knee_predict(file: UploadFile = File(...)):
-    image = read_image(file)
-    return models_pipeline["knee"].predict(image)
+@app.get("/health")
+def health():
+    return {"status": "ok", "service": "AI Medical Assistant API"}
 
 
-@app.post("/knee/explain")
-def knee_explain(file: UploadFile = File(...)):
-    image = read_image(file)
-    predictor = models_pipeline["knee"]
-    res = predictor.predict(image)
-    overlay, _ = knee_gradcam(predictor.model, image, res["predicted_grade"], device=predictor.device)
-    
-    buf = io.BytesIO()
-    overlay.save(buf, format="JPEG")
-    return Response(content=buf.getvalue(), media_type="image/jpeg")
+# ---------------------------------------------------------------------------
+# Vision Diagnostic Endpoints
+# ---------------------------------------------------------------------------
+@app.post("/predict/brain-mri", response_model=BrainMRIPredictionResponse)
+async def predict_brain_mri(file: UploadFile = File(...)):
+    if not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Uploaded file must be an image.")
+
+    contents = await file.read()
+    image = Image.open(io.BytesIO(contents)).convert("RGB")
+
+    try:
+        predictor = get_tumor_predictor()
+        res = predictor.predict(image)
+        return BrainMRIPredictionResponse(
+            predicted_class=res["predicted_class"],
+            confidence=float(res["confidence"]),
+            tumor_area_mm2=res.get("tumor_area_mm2"),
+            tumor_area_cm2=res.get("tumor_area_cm2")
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Brain MRI processing failed: {str(e)}")
 
 
-@app.post("/knee/explain-report")
-def knee_explain_report(file: UploadFile = File(...)):
-    image = read_image(file)
-    predictor = models_pipeline["knee"]
-    res = predictor.predict(image)
-    
-    report = explainer.generate_knee_report(
-        predicted_grade=res["predicted_grade"],
-        confidence=res.get("confidence", 0.0)
-    )
-    
-    return {
-        "metrics": res,
-        "report": report
-    }
+@app.post("/predict/knee-xray", response_model=KneeXRayPredictionResponse)
+async def predict_knee_xray(file: UploadFile = File(...)):
+    if not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Uploaded file must be an image.")
+
+    contents = await file.read()
+    image = Image.open(io.BytesIO(contents)).convert("RGB")
+
+    try:
+        predictor = get_knee_predictor()
+        res = predictor.predict(image)
+        return KneeXRayPredictionResponse(
+            predicted_grade=int(res["predicted_grade"]),
+            confidence=float(res["confidence"]),
+            calibrated=bool(res["calibrated"])
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Knee X-Ray processing failed: {str(e)}")
 
 
-# -----------------------------------------------------------------------------
-# Brain Tumor Endpoints
-# -----------------------------------------------------------------------------
-@app.post("/brain/predict")
-def brain_predict(file: UploadFile = File(...), mm_per_pixel: float = 0.5):
-    image = read_image(file)
-    res = models_pipeline["brain"].predict(image, mm_per_pixel=mm_per_pixel)
-    return {
-        "predicted_class": res["predicted_class"],
-        "confidence": res["confidence"],
-        "probabilities": res["probabilities"],
-        "tumor_area_pixels": res["tumor_area_pixels"],
-        "tumor_area_mm2": res["tumor_area_mm2"],
-        "tumor_area_cm2": res["tumor_area_cm2"],
-        "bounding_box": res["bounding_box"]
-    }
+# ---------------------------------------------------------------------------
+# Chatbot & Doctor Finder Endpoints
+# ---------------------------------------------------------------------------
+@app.post("/consult", response_model=ConsultResponse)
+async def consult(
+    symptoms: str = Form(""),
+    file: Optional[UploadFile] = File(None),
+    api_key: Optional[str] = Form(None),
+    x_api_key: Optional[str] = Header(None, alias="X-Mistral-Api-Key"),
+):
+    if not symptoms and not file:
+        raise HTTPException(status_code=400, detail="Provide symptoms text, an uploaded report, or both.")
+
+    file_bytes = None
+    content_type = ""
+    if file is not None:
+        file_bytes = await file.read()
+        content_type = file.content_type or ""
+
+    effective_key = api_key or x_api_key
+
+    try:
+        res = run_consult_logic(symptoms, file_bytes, content_type, api_key=effective_key)
+        return ConsultResponse(**res)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/brain/explain-cam")
-def brain_cam(file: UploadFile = File(...)):
-    image = read_image(file)
-    predictor: BrainTumorPredictor = models_pipeline["brain"]
-    res = predictor.predict(image)
-    cam_img = predictor.generate_gradcam(image, res["cls_tensor"], res["pred_idx"])
-    
-    buf = io.BytesIO()
-    cam_img.save(buf, format="JPEG")
-    return Response(content=buf.getvalue(), media_type="image/jpeg")
+@app.get("/find-doctors", response_model=DoctorSearchResponse)
+def find_doctors(location: str, specialty: Optional[str] = None, radius_km: float = 15.0):
+    if not location:
+        raise HTTPException(status_code=400, detail="Location is required.")
 
-
-@app.post("/brain/explain-detection")
-def brain_detection(file: UploadFile = File(...)):
-    image = read_image(file)
-    predictor: BrainTumorPredictor = models_pipeline["brain"]
-    res = predictor.predict(image)
-    det_img = predictor.generate_detection_overlay(res["det_result"])
-    
-    buf = io.BytesIO()
-    det_img.save(buf, format="JPEG")
-    return Response(content=buf.getvalue(), media_type="image/jpeg")
-
-
-@app.post("/brain/explain-report")
-def brain_explain_report(file: UploadFile = File(...)):
-    image = read_image(file)
-    res = models_pipeline["brain"].predict(image)
-    
-    report = explainer.generate_tumor_report(
-        predicted_class=res["predicted_class"],
-        confidence=res["confidence"],
-        area_mm2=res["tumor_area_mm2"],
-        area_cm2=res["tumor_area_cm2"]
-    )
-    
-    return {
-        "metrics": {
-            "predicted_class": res["predicted_class"],
-            "confidence": res["confidence"],
-            "tumor_area_mm2": res["tumor_area_mm2"],
-            "tumor_area_cm2": res["tumor_area_cm2"]
-        },
-        "report": report
-    }
+    try:
+        doctors = find_doctors_logic(location, specialty, radius_km)
+        return DoctorSearchResponse(results=[Doctor(**d) for d in doctors])
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
