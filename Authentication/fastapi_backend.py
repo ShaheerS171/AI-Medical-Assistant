@@ -11,7 +11,7 @@ import os
 from typing import Optional
 from fastapi import FastAPI, Depends, HTTPException, Header, status
 from pydantic import BaseModel, EmailStr
-from supabase_auth import auth_manager
+from .supabase_auth import auth_manager
 
 app = FastAPI(
     title="Medical Assistant API with Supabase Auth",

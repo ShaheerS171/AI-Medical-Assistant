@@ -9,6 +9,9 @@ import requests
 import streamlit as st
 from PIL import Image
 
+# Import Supabase Authentication Component
+from Authentication.streamlit_auth import render_auth_ui
+
 # Import Vision Models & Explainability Engines
 from explainability.mistral_engine import MedicalExplainerAPI
 from explainability.pdf_generator import MedicalReportPDFGenerator
@@ -66,6 +69,13 @@ def load_explainer_api():
 
 
 def main():
+    # Render Supabase Authentication Gatekeeper in Sidebar
+    is_authenticated, user = render_auth_ui(location="sidebar")
+
+    if not is_authenticated:
+        st.warning("🔒 Please sign in or register an account in the sidebar to access the AI Medical Assistant.")
+        st.stop()
+
     st.sidebar.title("🏥 AI Diagnostic Suite")
     st.sidebar.caption("Select a diagnostic module or access patient triage services.")
     
@@ -274,7 +284,6 @@ def render_chatbot_module():
     st.markdown('<div class="main-header">Medical Consultation & Doctor Locator</div>', unsafe_allow_html=True)
     st.markdown('<div class="sub-header">Automated patient symptom triage and geographic specialist discovery via OpenStreetMap</div>', unsafe_allow_html=True)
 
-    # Key Input Configuration in Sidebar
     with st.sidebar:
         st.markdown("---")
         st.subheader("🔑 Chatbot Settings")
