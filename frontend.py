@@ -43,6 +43,18 @@ st.markdown("""
         border: 1px solid #E2E8F0; 
         white-space: pre-wrap;
     }
+    .citation-card {
+        background: #F0F9FF;
+        border-left: 4px solid #0EA5E9;
+        border-radius: 6px;
+        padding: 0.75rem 1rem;
+        margin-bottom: 0.5rem;
+        font-size: 0.85rem;
+        color: #0F172A;
+    }
+    .urgency-high  { color: #DC2626; font-weight: 700; }
+    .urgency-medium{ color: #D97706; font-weight: 700; }
+    .urgency-low   { color: #16A34A; font-weight: 700; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -282,76 +294,146 @@ def render_knee_xray_module():
 # ---------------------------------------------------------------------------
 def render_chatbot_module():
     st.markdown('<div class="main-header">Medical Consultation & Doctor Locator</div>', unsafe_allow_html=True)
-    st.markdown('<div class="sub-header">Automated patient symptom triage and geographic specialist discovery via OpenStreetMap</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sub-header">RAG-grounded symptom triage powered by Mistral AI + live PubMed citations</div>', unsafe_allow_html=True)
 
-    with st.sidebar:
-        st.markdown("---")
-        st.subheader("🔑 Chatbot Settings")
-        default_key = os.getenv("MISTRAL_API_KEY", "")
-        if default_key == "your_mistral_api_key_here":
-            default_key = ""
-        current_key = st.session_state.get("user_mistral_api_key", default_key)
-        
-        user_key_input = st.text_input(
-            "Mistral API Key",
-            value=current_key,
-            type="password",
-            help="Required for direct AI consultation queries."
-        )
-        if user_key_input != current_key:
-            st.session_state["user_mistral_api_key"] = user_key_input.strip()
-            st.success("API Key updated!")
+    tab_consult, tab_find = st.tabs(["💬 AI Medical Chat", "📍 Find Nearby Specialist"])
 
-    tab_consult, tab_find = st.tabs(["💬 Symptom Triage & Consult", "📍 Find Nearby Specialist"])
-
-    # Sub-Tab 1: Symptom Consultation
+    # ------------------------------------------------------------------
+    # Sub-Tab 1: Proper Chat Interface
+    # ------------------------------------------------------------------
     with tab_consult:
-        st.subheader("1. Describe Symptoms or Upload File")
-        symptoms = st.text_area(
-            "Symptoms Description",
-            placeholder="e.g. Mild persistent headache and dry cough for 3 days...",
-            height=120
+        # Initialise session state
+        if "chat_history" not in st.session_state:
+            st.session_state.chat_history = []   # list of {role, content, meta}
+
+        # ---- Render existing messages ----
+        for msg in st.session_state.chat_history:
+            with st.chat_message(msg["role"]):
+                st.markdown(msg["content"])
+
+                # Show citations attached to assistant messages
+                citations = msg.get("citations", [])
+                if citations:
+                    with st.expander(f"📚 {len(citations)} source(s)", expanded=False):
+                        for i, c in enumerate(citations, 1):
+                            year_str = f" ({c['year']})" if c.get("year") else ""
+                            journal_str = f" — *{c['journal']}*" if c.get("journal") else ""
+                            authors_str = f"{c['authors']}" if c.get("authors") else ""
+                            st.markdown(
+                                f"""
+                                <div class='citation-card'>
+                                <b>[{i}]</b> {authors_str}{year_str}. 
+                                <a href='{c['url']}' target='_blank'>{c['title']}</a>{journal_str}.
+                                <br/><small>PMID: {c['pmid']}</small>
+                                </div>
+                                """,
+                                unsafe_allow_html=True,
+                            )
+
+        # ---- Optional file upload (above chat input) ----
+        uploaded_doc = st.file_uploader(
+            "📎 Attach a medical report (PDF / Image) — optional",
+            type=["pdf", "png", "jpg", "jpeg"],
+            key="chat_upload",
+            label_visibility="collapsed",
         )
-        uploaded_doc = st.file_uploader("Upload Medical PDF or Image (Optional)", type=["pdf", "png", "jpg", "jpeg"])
+        if uploaded_doc:
+            st.caption(f"📎 Attached: `{uploaded_doc.name}`")
 
-        active_key = st.session_state.get("user_mistral_api_key") or os.getenv("MISTRAL_API_KEY", "")
-        if active_key == "your_mistral_api_key_here":
-            active_key = ""
+        # ---- Chat input bar ----
+        user_input = st.chat_input("Describe your symptoms (e.g. headache, fever for 3 days)...")
 
-        if st.button("Run Consultation Assessment", type="primary"):
-            if not symptoms and not uploaded_doc:
-                st.warning("Please provide symptoms description, upload a report file, or both.")
-            else:
-                with st.spinner("Analyzing intake data..."):
-                    file_bytes = uploaded_doc.getvalue() if uploaded_doc else None
-                    content_type = uploaded_doc.type if uploaded_doc else ""
+        if user_input or (uploaded_doc and st.session_state.get("_pending_upload")):
+            prompt_text = user_input or "(no text — see attached file)"
 
+            # Display user bubble immediately
+            with st.chat_message("user"):
+                st.markdown(prompt_text)
+                if uploaded_doc:
+                    st.caption(f"📎 {uploaded_doc.name}")
+
+            st.session_state.chat_history.append({
+                "role": "user",
+                "content": prompt_text + (f"\n📎 *{uploaded_doc.name}*" if uploaded_doc else ""),
+            })
+
+            # Call backend
+            with st.chat_message("assistant"):
+                with st.spinner("Consulting medical knowledge base & PubMed..."):
                     try:
+                        active_key = os.getenv("MISTRAL_API_KEY", "")
+                        file_bytes = uploaded_doc.getvalue() if uploaded_doc else None
+                        content_type = uploaded_doc.type if uploaded_doc else ""
+
+                        # Pass prior turns so Mistral remembers the conversation
+                        prior_history = [
+                            {"role": m["role"], "content": m["content"]}
+                            for m in st.session_state.chat_history
+                        ]
                         res = run_consult_logic(
-                            symptoms=symptoms,
+                            symptoms=user_input or "",
                             file_bytes=file_bytes,
                             content_type=content_type,
-                            api_key=active_key
+                            api_key=active_key,
+                            chat_history=prior_history,
                         )
 
                         urgency = res.get("urgency", "unknown").lower()
-                        badge_color = {"low": "green", "medium": "orange", "high": "red"}.get(urgency, "gray")
+                        badge_map = {"low": "🟢 LOW", "medium": "🟡 MEDIUM", "high": "🔴 HIGH"}
+                        badge = badge_map.get(urgency, f"⚪ {urgency.upper()}")
 
-                        st.markdown(f"**Urgency Assessment:** :{badge_color}[{urgency.upper()}]")
-                        st.markdown("**Clinical Advice Summary:**")
-                        st.info(res.get("advice", ""))
+                        advice = res.get("advice", "")
+                        specialist = res.get("recommended_specialist")
+                        disclaimer = res.get("disclaimer", "")
+                        citations = res.get("citations", [])
 
-                        if res.get("recommended_specialist"):
-                            st.success(f"**Recommended Specialist Type:** {res['recommended_specialist']}")
+                        # Build assistant message
+                        response_md = f"**Urgency:** {badge}\n\n{advice}"
+                        if specialist:
+                            response_md += f"\n\n🩺 **Recommended Specialist:** {specialist}"
+                        response_md += f"\n\n---\n⚠️ *{disclaimer}*"
 
-                        st.caption(f"⚠️ {res.get('disclaimer')}")
+                        st.markdown(response_md)
+
+                        # Citations panel
+                        if citations:
+                            with st.expander(f"📚 {len(citations)} source(s)", expanded=False):
+                                for i, c in enumerate(citations, 1):
+                                    year_str = f" ({c['year']})" if c.get("year") else ""
+                                    journal_str = f" — *{c['journal']}*" if c.get("journal") else ""
+                                    authors_str = f"{c['authors']}" if c.get("authors") else ""
+                                    st.markdown(
+                                        f"""
+                                        <div class='citation-card'>
+                                        <b>[{i}]</b> {authors_str}{year_str}. 
+                                        <a href='{c['url']}' target='_blank'>{c['title']}</a>{journal_str}.
+                                        <br/><small>PMID: {c['pmid']}</small>
+                                        </div>
+                                        """,
+                                        unsafe_allow_html=True,
+                                    )
+
+                        # Save to history
+                        st.session_state.chat_history.append({
+                            "role": "assistant",
+                            "content": response_md,
+                            "citations": citations,
+                        })
 
                     except Exception as ex:
-                        st.error(f"Consultation evaluation failed: {ex}")
+                        st.error(f"Consultation failed: {ex}")
 
-    # Sub-Tab 2: Doctor Finder
+        # Clear chat button
+        if st.session_state.chat_history:
+            if st.button("🗑️ Clear Chat History", key="clear_chat"):
+                st.session_state.chat_history = []
+                st.rerun()
+
+    # ------------------------------------------------------------------
+    # Sub-Tab 2: Doctor Finder (unchanged)
+    # ------------------------------------------------------------------
     with tab_find:
-        st.subheader("2. Search Nearby Healthcare Facilities")
+        st.subheader("Search Nearby Healthcare Facilities")
         col_loc, col_spec = st.columns([2, 1])
         with col_loc:
             location = st.text_input("Current Location / City", placeholder="e.g. Rawalpindi, Pakistan")

@@ -123,6 +123,7 @@ class ConsultResponse(BaseModel):
     urgency: str
     recommended_specialist: Optional[str] = None
     disclaimer: str
+    citations: Optional[List[Dict[str, Any]]] = []
 
 
 class Doctor(BaseModel):

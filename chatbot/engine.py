@@ -12,6 +12,9 @@ from typing import Optional, List, Dict, Any
 import requests
 from dotenv import load_dotenv
 
+# PubMed RAG — live citation fetcher
+from chatbot.pubmed_rag import get_pubmed_citations
+
 load_dotenv()
 
 MISTRAL_CHAT_URL = "https://api.mistral.ai/v1/chat/completions"
@@ -30,6 +33,8 @@ latter already converted to text for you), do the following:
 3. Rate urgency as one of: "low", "medium", "high" ("high" = seek care immediately / emergency room).
 4. Recommend a specialist type to see if relevant (e.g. "cardiologist", "dermatologist"), or null if a general physician / no visit is needed.
 5. Always make clear this is not a diagnosis and a licensed physician should confirm.
+6. If relevant medical literature is provided below, use it to ground your advice and reference it naturally
+   (e.g. "According to recent literature..."). Do NOT make up citations.
 
 Respond ONLY with a single JSON object and nothing else (no markdown fences, no preamble), using exactly these keys:
 {
@@ -100,13 +105,31 @@ def run_consult_logic(
     file_bytes: Optional[bytes] = None,
     content_type: str = "",
     api_key: Optional[str] = None,
+    chat_history: Optional[List[Dict[str, Any]]] = None,
 ) -> dict:
     if not symptoms and not file_bytes:
         raise ValueError("Provide symptoms text, an uploaded report, or both.")
 
+    # ------------------------------------------------------------------
+    # 1. Fetch live PubMed citations (RAG grounding) from symptom text
+    # ------------------------------------------------------------------
+    pubmed_result = {"citations": [], "context_block": ""}
+    if symptoms and symptoms.strip():
+        try:
+            pubmed_result = get_pubmed_citations(symptoms)
+        except Exception:
+            pass  # graceful degradation — proceed without citations
+
+    # ------------------------------------------------------------------
+    # 2. Build text prompt
+    # ------------------------------------------------------------------
     text_prompt = ""
     if symptoms:
         text_prompt += f"Patient-reported symptoms: {symptoms}\n\n"
+
+    # Inject PubMed context block into prompt if available
+    if pubmed_result["context_block"]:
+        text_prompt += pubmed_result["context_block"] + "\n\n"
 
     image_data_uri = None
 
@@ -124,6 +147,9 @@ def run_consult_logic(
 
     text_prompt += "Respond with the JSON object described in your instructions."
 
+    # ------------------------------------------------------------------
+    # 3. Call Mistral
+    # ------------------------------------------------------------------
     if image_data_uri:
         model = VISION_MODEL
         user_message = {
@@ -137,13 +163,23 @@ def run_consult_logic(
         model = TEXT_MODEL
         user_message = {"role": "user", "content": text_prompt}
 
+    # Build messages list: system → prior history (last 10 turns) → current message
+    history_messages = []
+    if chat_history:
+        for h in chat_history[-10:]:  # cap at last 10 turns to control token usage
+            role = h.get("role", "user")
+            content = h.get("content", "")
+            if role in ("user", "assistant") and content:
+                history_messages.append({"role": role, "content": str(content)})
+
     payload = {
         "model": model,
         "messages": [
             {"role": "system", "content": MEDICAL_SYSTEM_PROMPT},
+            *history_messages,
             user_message,
         ],
-        "max_tokens": 1024,
+        "max_tokens": 1200,
     }
 
     headers = _mistral_headers(api_key)
@@ -159,6 +195,8 @@ def run_consult_logic(
         "urgency": parsed.get("urgency", "unknown"),
         "recommended_specialist": parsed.get("recommended_specialist"),
         "disclaimer": parsed.get("disclaimer", DEFAULT_DISCLAIMER),
+        # PubMed citations — new field (None-safe, frontend can ignore if absent)
+        "citations": pubmed_result["citations"],
     }
 
 
