@@ -18,6 +18,7 @@ from explainability.pdf_generator import MedicalReportPDFGenerator
 from knee_model.src.inference import KneeOAPredictor
 from knee_model.src.gradcam import run_gradcam
 from tumor_model.src.inference import BrainTumorPredictor
+from kidney_model.src.inference import KidneyUltrasoundPredictor
 
 # Import Chatbot Core Engine Logic
 from chatbot.engine import run_consult_logic, find_doctors_logic
@@ -76,6 +77,14 @@ def load_tumor_predictor():
 
 
 @st.cache_resource
+def load_kidney_predictor():
+    return KidneyUltrasoundPredictor(
+        weights_path="kidney_model/weights_fixed.pth",
+        excel_path="kidney_model/OpenKidneyUltrasoundDataSet_TransducerInfo.xlsx",
+    )
+
+
+@st.cache_resource
 def load_explainer_api():
     return MedicalExplainerAPI()
 
@@ -97,7 +106,7 @@ def main():
             "🧠 Brain MRI (Tumor Detection)",
             "🦴 Knee X-Ray (Osteoarthritis)",
             "💬 Medical Consultation & Doctor Finder",
-            "🔊 Ultrasound (Upcoming)"
+            "🫘 Kidney Ultrasound (Morphometry)"
         ]
     )
 
@@ -110,8 +119,8 @@ def main():
         render_knee_xray_module()
     elif app_mode == "💬 Medical Consultation & Doctor Finder":
         render_chatbot_module()
-    elif app_mode == "🔊 Ultrasound (Upcoming)":
-        render_ultrasound_module()
+    elif app_mode == "🫘 Kidney Ultrasound (Morphometry)":
+        render_kidney_ultrasound_module()
 
 
 # ---------------------------------------------------------------------------
@@ -465,12 +474,108 @@ def render_chatbot_module():
 
 
 # ---------------------------------------------------------------------------
-# Module 4: Ultrasound (Placeholders)
+# Module 4: Kidney Ultrasound Morphometry
 # ---------------------------------------------------------------------------
-def render_ultrasound_module():
-    st.markdown('<div class="main-header">Ultrasound Diagnostic Suite</div>', unsafe_allow_html=True)
-    st.markdown('<div class="sub-header">Module under active development</div>', unsafe_allow_html=True)
-    st.info("🚧 **Upcoming Feature:** Reserved for automated abdominal and vascular ultrasound analysis modules.")
+def render_kidney_ultrasound_module():
+    st.markdown('<div class="main-header">Kidney Ultrasound Morphometry</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sub-header">DeepLabV3+ Segmentation · Length / Width / Thickness · LLM Draft Report</div>', unsafe_allow_html=True)
+
+    col_long, col_trans = st.columns([1, 1], gap="large")
+
+    with col_long:
+        st.subheader("1. Longitudinal View (Length)")
+        long_file = st.file_uploader(
+            "Upload longitudinal kidney ultrasound (PNG/JPG)...",
+            type=["png", "jpg", "jpeg"],
+            key="kidney_long_upload"
+        )
+
+    with col_trans:
+        st.subheader("2. Transverse View (Width & Thickness)")
+        trans_file = st.file_uploader(
+            "Upload transverse kidney ultrasound (PNG/JPG)...",
+            type=["png", "jpg", "jpeg"],
+            key="kidney_trans_upload"
+        )
+
+    st.subheader("3. Patient Intake Form")
+    with st.form("kidney_patient_form"):
+        p_name = st.text_input("Patient Full Name", "Jane Doe")
+        p_id = st.text_input("Patient ID", "PAT-KID-0001")
+        col_a, col_b = st.columns(2)
+        p_age = col_a.number_input("Age", 1, 120, 45)
+        p_sex = col_b.selectbox("Biological Sex", ["Female", "Male", "Other"])
+        p_history = st.text_area(
+            "Clinical Complaints & History",
+            "Flank pain and haematuria for 2 weeks. Suspected renal pathology for further evaluation."
+        )
+        submit_kidney = st.form_submit_button("Run Segmentation & Generate Report")
+
+    if long_file and trans_file and submit_kidney:
+        long_img = Image.open(long_file).convert("RGB")
+        trans_img = Image.open(trans_file).convert("RGB")
+
+        with st.spinner("Running kidney segmentation & generating clinical report..."):
+            kidney_predictor = load_kidney_predictor()
+            explainer_api = load_explainer_api()
+
+            results = kidney_predictor.predict(
+                longitudinal_img=long_img,
+                transverse_img=trans_img,
+                long_filename=long_file.name,
+                trans_filename=trans_file.name,
+            )
+
+            patient_info = {"name": p_name, "id": p_id, "age": p_age, "sex": p_sex, "history": p_history}
+
+            report_text = explainer_api.generate_kidney_report(
+                length_cm=results["length_cm"],
+                width_cm=results["width_cm"],
+                thickness_cm=results["thickness_cm"],
+                patient_info=patient_info,
+            )
+
+        st.markdown("---")
+        st.subheader("Segmentation Overlays")
+        col_img1, col_img2 = st.columns(2)
+        col_img1.image(results["annotated_longitudinal"], caption="Longitudinal View — Length Axis", use_container_width=True)
+        col_img2.image(results["annotated_transverse"], caption="Transverse View — Width & Thickness Axes", use_container_width=True)
+
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Kidney Length", f"{results['length_cm']:.2f} cm")
+        m2.metric("Kidney Width", f"{results['width_cm']:.2f} cm")
+        m3.metric("Kidney Thickness", f"{results['thickness_cm']:.2f} cm")
+
+        st.markdown("---")
+        st.subheader("4. Live Radiological Report Preview")
+        st.markdown(f'<div class="report-box">{report_text}</div>', unsafe_allow_html=True)
+
+        st.markdown("---")
+        pdf_gen = MedicalReportPDFGenerator()
+        metrics = {
+            "Length": f"{results['length_cm']:.2f} cm",
+            "Width": f"{results['width_cm']:.2f} cm",
+            "Thickness": f"{results['thickness_cm']:.2f} cm",
+        }
+        # Use longitudinal annotated image as primary and transverse as overlay
+        pdf_bytes = pdf_gen.generate_pdf(
+            patient_info=patient_info,
+            report_text=report_text,
+            original_img=long_img,
+            overlay_img=results["annotated_longitudinal"],
+            metrics=metrics,
+            scan_type="Kidney Ultrasound (B-Mode)"
+        )
+
+        st.download_button(
+            label="📄 Download Medical PDF Report",
+            data=pdf_bytes,
+            file_name=f"Kidney_Ultrasound_Report_{p_id}.pdf",
+            mime="application/pdf",
+            use_container_width=True
+        )
+    elif submit_kidney:
+        st.warning("⚠️ Please upload both the longitudinal and transverse ultrasound images before running analysis.")
 
 
 if __name__ == "__main__":

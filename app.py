@@ -37,6 +37,7 @@ from Authentication.fastapi_backend import get_current_user
 from knee_model.src.inference import KneeOAPredictor
 from knee_model.src.gradcam import run_gradcam
 from tumor_model.src.inference import BrainTumorPredictor
+from kidney_model.src.inference import KidneyUltrasoundPredictor
 from explainability.mistral_engine import MedicalExplainerAPI
 from explainability.pdf_generator import MedicalReportPDFGenerator
 from chatbot.engine import run_consult_logic, find_doctors_logic
@@ -56,6 +57,7 @@ app.add_middleware(
 # ---------------------------------------------------------------------------
 _knee_predictor: Optional[KneeOAPredictor] = None
 _tumor_predictor: Optional[BrainTumorPredictor] = None
+_kidney_predictor: Optional[KidneyUltrasoundPredictor] = None
 _explainer_api: Optional[MedicalExplainerAPI] = None
 _pdf_generator: Optional[MedicalReportPDFGenerator] = None
 
@@ -78,6 +80,16 @@ def get_tumor_predictor() -> BrainTumorPredictor:
             cls_path="tumor_model/modelfiles/MRIb3.pth"
         )
     return _tumor_predictor
+
+
+def get_kidney_predictor() -> KidneyUltrasoundPredictor:
+    global _kidney_predictor
+    if _kidney_predictor is None:
+        _kidney_predictor = KidneyUltrasoundPredictor(
+            weights_path="kidney_model/weights_fixed.pth",
+            excel_path="kidney_model/OpenKidneyUltrasoundDataSet_TransducerInfo.xlsx",
+        )
+    return _kidney_predictor
 
 
 def get_explainer_api() -> MedicalExplainerAPI:
@@ -116,6 +128,12 @@ class KneeXRayPredictionResponse(BaseModel):
     predicted_grade: int
     confidence: float
     calibrated: bool
+
+
+class KidneyUltrasoundResponse(BaseModel):
+    length_cm: float
+    width_cm: float
+    thickness_cm: float
 
 
 class ConsultResponse(BaseModel):
@@ -200,6 +218,38 @@ async def predict_knee_xray(
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Knee X-Ray processing failed: {str(e)}")
+
+
+@app.post("/predict/kidney-ultrasound", response_model=KidneyUltrasoundResponse)
+async def predict_kidney_ultrasound(
+    longitudinal: UploadFile = File(..., description="Longitudinal (coronal) kidney ultrasound image"),
+    transverse: UploadFile = File(..., description="Transverse kidney ultrasound image"),
+    current_user: dict = Depends(get_current_user)
+):
+    for f in (longitudinal, transverse):
+        if not f.content_type.startswith("image/"):
+            raise HTTPException(status_code=400, detail=f"File '{f.filename}' must be an image.")
+
+    long_bytes = await longitudinal.read()
+    trans_bytes = await transverse.read()
+    long_img = Image.open(io.BytesIO(long_bytes)).convert("RGB")
+    trans_img = Image.open(io.BytesIO(trans_bytes)).convert("RGB")
+
+    try:
+        predictor = get_kidney_predictor()
+        res = predictor.predict(
+            longitudinal_img=long_img,
+            transverse_img=trans_img,
+            long_filename=longitudinal.filename or "unknown",
+            trans_filename=transverse.filename or "unknown",
+        )
+        return KidneyUltrasoundResponse(
+            length_cm=res["length_cm"],
+            width_cm=res["width_cm"],
+            thickness_cm=res["thickness_cm"],
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Kidney ultrasound processing failed: {str(e)}")
 
 
 # ---------------------------------------------------------------------------

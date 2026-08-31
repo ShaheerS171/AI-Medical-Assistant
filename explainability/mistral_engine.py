@@ -167,3 +167,69 @@ Keep the language formal, precise, and authoritative.
         )
 
         return response.choices[0].message.content
+
+    def generate_kidney_report(
+        self,
+        length_cm: float,
+        width_cm: float,
+        thickness_cm: float,
+        patient_info: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        patient_info = patient_info or {}
+        patient_name = patient_info.get("name", "Unspecified")
+        patient_id = patient_info.get("id", "N/A")
+        age = patient_info.get("age", "Unspecified")
+        sex = patient_info.get("sex", "Unspecified")
+        history = patient_info.get("history", "No clinical history provided.")
+
+        prompt = f"""
+You are an expert Abdominal Radiology AI Assistant. Generate a formal 5-section medical report based on patient intake data and automated kidney ultrasound morphometric measurements.
+
+### Patient & Examination Header
+- Patient Name: {patient_name}
+- Patient ID: {patient_id}
+- Age / Sex: {age} / {sex}
+- Imaging Modality: Kidney Ultrasound (B-Mode)
+
+### Machine Vision Findings (DeepLabV3+ Segmentation):
+- Kidney Length (Longitudinal View): {length_cm:.2f} cm
+- Kidney Width (Transverse View): {width_cm:.2f} cm
+- Kidney Thickness (Transverse View): {thickness_cm:.2f} cm
+- Clinical History / Indication: {history}
+
+Normal adult kidney morphometry reference:
+- Length: 9–12 cm | Width: 4–6 cm | Thickness: 3–5 cm
+
+Generate a formal medical draft structured strictly under these 5 Markdown section headers:
+
+1. **Patient & Examination Header**
+   Summarize patient demographics, imaging modality, and examination context.
+
+2. **Clinical History & Indication**
+   Synthesize the presented patient history ({history}) and indications for renal ultrasound evaluation.
+
+3. **Technique & Visual Observations**
+   Describe the B-mode ultrasound technique and the segmentation-based morphometric measurements obtained: length {length_cm:.2f} cm, width {width_cm:.2f} cm, thickness {thickness_cm:.2f} cm.
+
+4. **Detailed Radiological Findings**
+   Interpret the morphometric values in clinical context. Compare against normal adult reference ranges. Discuss whether the kidney is normal, enlarged (nephromegaly), or reduced (renal atrophy), and comment on likely clinical significance (e.g., hydronephrosis, chronic kidney disease, compensatory hypertrophy).
+
+5. **Impression & Clinical Recommendations**
+   Deliver a precise impression and outline actionable next steps (e.g., renal function tests, Doppler ultrasound, contrast-enhanced CT, nephrology referral).
+
+Keep the language formal, precise, and authoritative.
+"""
+
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are a specialized medical reasoning AI generating professional abdominal radiology reports.",
+                },
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0.3,
+        )
+
+        return response.choices[0].message.content
