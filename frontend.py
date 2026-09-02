@@ -323,7 +323,7 @@ def render_chatbot_module():
                 # Show citations attached to assistant messages
                 citations = msg.get("citations", [])
                 if citations:
-                    with st.expander(f"📚 {len(citations)} source(s)", expanded=False):
+                    with st.popover(f"📚 View {len(citations)} source(s)"):
                         for i, c in enumerate(citations, 1):
                             year_str = f" ({c['year']})" if c.get("year") else ""
                             journal_str = f" — *{c['journal']}*" if c.get("journal") else ""
@@ -406,7 +406,7 @@ def render_chatbot_module():
 
                         # Citations panel
                         if citations:
-                            with st.expander(f"📚 {len(citations)} source(s)", expanded=False):
+                            with st.popover(f"📚 View {len(citations)} source(s)"):
                                 for i, c in enumerate(citations, 1):
                                     year_str = f" ({c['year']})" if c.get("year") else ""
                                     journal_str = f" — *{c['journal']}*" if c.get("journal") else ""
