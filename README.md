@@ -1,123 +1,181 @@
-# Medical AI Diagnostic Platform
+# AI Medical Assistant
 
-## Plan
+### Grounded Multi-Modal Clinical Decision Support System
 
-A production-grade clinical decision support platform that enables healthcare professionals to upload medical scans, receive AI-assisted predictions, visualize explainability heatmaps, generate clinical summaries, and prioritize cases based on severity.
-
-The platform is designed to assist doctors and radiologists, not replace them. All AI outputs are recommendations requiring human review and approval.
+*Combining Medical Imaging AI, Retrieval-Augmented Generation, and Explainable Diagnostics to deliver trustworthy clinical insights.*
 
 ---
 
-# Core Objectives
+## The Problem
 
-## Medical Image Analysis
+Medical AI systems often operate as black boxes.
 
-Support multiple imaging modalities:
+They generate predictions but provide little explanation, making it difficult for healthcare professionals to trust, validate, or act upon their outputs.
 
-* Chest X-Ray
-* Bone Fracture X-Ray
-* Brain MRI
-* CT Scan
-* Ultrasound
-* Mammography
+At the same time, modern large language models can hallucinate clinical information, creating significant risks in healthcare environments.
 
-## AI-Assisted Detection
+Healthcare professionals need AI systems that are:
 
-Provide:
-
-* Disease prediction
-* Confidence score
-* Severity score
-* Risk classification
-
-## Explainability
-
-Generate:
-
-* Grad-CAM heatmaps
-* Attention maps
-* Region highlighting
-* Explainability reports
-
-## Clinical Summary
-
-Generate AI-assisted summaries describing:
-
-* Potential findings
-* Affected regions
-* Supporting evidence
-* Recommended review priority
-
-## Triage Queue
-
-Automatically prioritize scans:
-
-* Critical
-* High
-* Medium
-* Low
-
-Helping clinicians review urgent cases first.
+- Accurate
+- Explainable
+- Evidence-backed
+- Clinically useful
+- Secure
+- Fast enough for real-world workflows
 
 ---
 
-# High-Level Architecture
+## Our Solution
+
+AI Medical Assistant is a multi-modal clinical decision support platform that combines deep learning, retrieval-augmented generation, and evidence-based medical reasoning into a unified workflow.
+
+Rather than simply predicting a diagnosis, the platform:
+
+1. Analyzes medical scans using specialized computer vision models
+2. Produces confidence-aware diagnostic predictions
+3. Generates explainable findings
+4. Retrieves supporting medical literature
+5. Delivers citation-backed clinical reasoning
+6. Recommends appropriate medical specialists
+
+The result is a transparent AI workflow that prioritizes trust rather than blind prediction.
+
+---
+
+# Features
+
+## Brain MRI Analysis
+
+AI-powered brain tumor detection and classification from MRI scans.
+
+### Capabilities
+
+- Tumor classification
+- Confidence scoring
+- Explainable results
+- Clinical interpretation
+- Diagnostic reporting
+
+---
+
+## Knee Osteoarthritis Assessment
+
+Automated Kellgren-Lawrence grading from knee X-Ray images.
+
+### Capabilities
+
+- Osteoarthritis severity grading
+- Confidence probabilities
+- Clinical interpretation
+- Severity assessment
+
+---
+
+## Kidney Ultrasound Analysis
+
+Automated kidney morphometry and anomaly assessment from ultrasound scans.
+
+### Capabilities
+
+- Kidney structure evaluation
+- Morphological measurements
+- Anomaly detection
+- Clinical reporting
+
+---
+
+## Explainable AI
+
+Healthcare professionals require evidence, not just predictions.
+
+Every diagnostic result includes:
+
+- Probability distributions
+- Confidence scores
+- Clinical interpretation
+- Supporting rationale
+
+This reduces the black-box nature of traditional diagnostic systems.
+
+---
+
+## Grounded Medical RAG
+
+Unlike generic healthcare chatbots, our system does not rely solely on LLM-generated responses.
+
+The consultation engine:
+
+- Retrieves relevant medical literature
+- Searches embedded clinical knowledge
+- Grounds responses using retrieved evidence
+- Generates citation-backed explanations
+
+This significantly reduces hallucination risk.
+
+---
+
+## Clinical Consultation Assistant
+
+Healthcare professionals can:
+
+- Ask follow-up questions
+- Request medical explanations
+- Explore possible interpretations
+- Understand model outputs
+
+All responses are grounded using retrieved medical context.
+
+---
+
+## Intelligent Specialist Recommendation
+
+Based on diagnostic findings, the platform recommends appropriate medical specialties for further consultation.
+
+Examples include:
+
+- Neurology
+- Neurosurgery
+- Orthopedics
+- Nephrology
+
+---
+
+# System Architecture
 
 ```text
-                    ┌───────────────┐
-                    │ React Frontend│
-                    └───────┬───────┘
-                            │
-                            ▼
+┌──────────────────────────────────────────────┐
+│              React Frontend                  │
+│     Modern Clinical Dashboard (Vite SPA)     │
+└─────────────────────┬────────────────────────┘
+                      │
+                      ▼
+┌──────────────────────────────────────────────┐
+│             FastAPI Backend                  │
+│      JWT Authentication + API Gateway        │
+└─────────────────────┬────────────────────────┘
+                      │
+          ┌───────────┼───────────┐
+          ▼           ▼           ▼
 
-                 ┌────────────────────┐
-                 │ API Gateway        │
-                 │ FastAPI            │
-                 └────────┬───────────┘
-                          │
+┌────────────────┐ ┌────────────────┐ ┌────────────────┐
+│ Brain MRI AI   │ │ Knee X-Ray AI  │ │ Kidney US AI   │
+│ Classification │ │ KL Grading     │ │ Morphometry    │
+└───────┬────────┘ └───────┬────────┘ └───────┬────────┘
+        │                  │                  │
+        └──────────────────┼──────────────────┘
+                           ▼
 
-       ┌──────────────────┼──────────────────┐
-       ▼                  ▼                  ▼
+┌──────────────────────────────────────────────┐
+│        Retrieval-Augmented Reasoning         │
+│          LangChain + Mistral AI              │
+└─────────────────────┬────────────────────────┘
+                      │
+                      ▼
 
-┌──────────────┐ ┌────────────────┐ ┌──────────────┐
-│ Upload Svc   │ │ Inference Svc  │ │ Auth Svc     │
-└──────────────┘ └────────────────┘ └──────────────┘
-
-                          │
-                          ▼
-
-                 ┌────────────────┐
-                 │ Model Registry │
-                 └────────────────┘
-
-                          │
-                          ▼
-
-                 ┌────────────────┐
-                 │ Explainability │
-                 │ GradCAM Svc    │
-                 └────────────────┘
-
-                          │
-                          ▼
-
-                 ┌────────────────┐
-                 │ Triage Engine  │
-                 └────────────────┘
-
-                          │
-                          ▼
-
-                 ┌────────────────┐
-                 │ PostgreSQL     │
-                 └────────────────┘
-
-                          │
-                          ▼
-
-                 ┌────────────────┐
-                 │ S3 / MinIO     │
-                 └────────────────┘
+┌──────────────────────────────────────────────┐
+│          ChromaDB Knowledge Base             │
+│      PubMed + WHO + Medical Literature       │
+└──────────────────────────────────────────────┘
 ```
 
 ---
@@ -126,682 +184,196 @@ Helping clinicians review urgent cases first.
 
 ## Frontend
 
-* Next.js
-* React
-* TypeScript
-* TailwindCSS
-* ShadCN UI
-* TanStack Query
+- React
+- Vite
+- Framer Motion
+- Axios
+- Tailwind CSS
+- Lucide React
 
 ## Backend
 
-* FastAPI
-* Python 3.13
-* SQLAlchemy 2.0
-* Pydantic V2
-* Alembic
+- FastAPI
+- Uvicorn
+- Pydantic
+- Python
 
-## Database
+## Artificial Intelligence
 
-* PostgreSQL
-* Redis
+- PyTorch
+- Torchvision
+- NumPy
+- Pillow
 
-## Storage
+## Retrieval-Augmented Generation
 
-* AWS S3
-* MinIO (local development)
+- LangChain
+- ChromaDB
+- HuggingFace Embeddings
+- Mistral AI
 
-## AI & Medical Imaging
+## Authentication
 
-* PyTorch
-* MONAI
-* ONNX Runtime
-* TorchServe
-* OpenCV
-* NumPy
-
-## DICOM Processing
-
-* pydicom
-* highdicom
-
-## Infrastructure
-
-* Docker
-* Docker Compose
-* Kubernetes
-* Terraform
-
-## Monitoring
-
-* Prometheus
-* Grafana
-* OpenTelemetry
-* Sentry
+- Supabase Auth
+- JWT Bearer Tokens
 
 ---
 
-# Phase 0 — Engineering Foundation
-
-## Goals
-
-Establish a production-ready development environment.
-
-## Deliverables
-
-* Monorepo setup
-* Docker environment
-* CI/CD pipeline
-* Code quality tooling
-* Testing framework
-
-## Tasks
-
-### Repository Setup
-
-```bash
-frontend/
-backend/
-infrastructure/
-docs/
-```
-
-### Tooling
-
-* Ruff
-* Black
-* Mypy
-* Pre-commit hooks
-
-### CI/CD
-
-* GitHub Actions
-* Unit tests
-* Lint checks
-* Docker builds
-
-### Local Infrastructure
-
-```yaml
-PostgreSQL
-Redis
-MinIO
-```
-
----
-
-# Phase 1 — Authentication & Authorization
-
-## Goals
-
-Secure the platform.
-
-## User Roles
-
-### Admin
-
-Full system access.
-
-### Radiologist
-
-Review imaging cases.
-
-### Doctor
-
-Review patient findings.
-
-### Nurse
-
-Upload and manage studies.
-
-### Researcher
-
-Access approved datasets.
-
-## Features
-
-* JWT Authentication
-* Refresh Tokens
-* Role-Based Access Control
-* Audit Logging
-* Session Tracking
-
----
-
-# Phase 2 — Medical Imaging Pipeline
-
-## Goals
-
-Support medical imaging workflows.
-
-## Supported Formats
-
-* DICOM
-* JPEG
-* PNG
-
-## Features
-
-### DICOM Parsing
-
-Extract:
-
-* Patient metadata
-* Study metadata
-* Scan metadata
-
-### Preview Generation
-
-Convert DICOM images into web-viewable previews.
-
-### Storage
-
-Store:
-
-* Original scan
-* Processed scan
-* Metadata
-
-## Database Design
-
-### Patient
+# Repository Structure
 
 ```text
-Patient
-```
-
-### Study
-
-```text
-Study
-```
-
-### Series
-
-```text
-Series
-```
-
-### Image
-
-```text
-Image
-```
-
-Relationship:
-
-```text
-Patient
- └── Study
-      └── Series
-           └── Images
-```
-
----
-
-# Phase 3 — Secure Storage Layer
-
-## Goals
-
-Store medical scans securely.
-
-## Upload Workflow
-
-```text
-Upload Scan
-     ↓
-Validate
-     ↓
-Virus Scan
-     ↓
-Store In S3
-     ↓
-Create DB Record
-```
-
-## Features
-
-* Signed URLs
-* Encryption at rest
-* Encryption in transit
-* Object versioning
-* Metadata indexing
-
----
-
-# Phase 4 — Model Registry
-
-## Goals
-
-Manage AI models centrally.
-
-## Example Models
-
-```text
-ChestXray_v1
-ChestXray_v2
-
-BrainMRI_v1
-
-FractureDetector_v1
-```
-
-## Database Tables
-
-### Model
-
-Stores model information.
-
-### ModelVersion
-
-Tracks versions.
-
-### Deployment
-
-Tracks active deployments.
-
-### Metrics
-
-Stores evaluation metrics.
-
----
-
-# Phase 5 — AI Inference Engine
-
-## Goals
-
-Run AI predictions.
-
-## Workflow
-
-```text
-Upload Scan
-      ↓
-Scan Type Detection
-      ↓
-Model Selection
-      ↓
-Inference
-      ↓
-Prediction Storage
-```
-
-## Example Output
-
-```json
-{
-  "prediction": "Pneumonia",
-  "confidence": 0.94,
-  "severity": 0.81
-}
-```
-
-## Stored Results
-
-* Prediction
-* Confidence
-* Severity
-* Timestamp
-* Model version
-
----
-
-# Phase 6 — Explainability Engine
-
-## Goals
-
-Provide transparency.
-
-## Techniques
-
-### Grad-CAM
-
-Visual heatmaps.
-
-### Grad-CAM++
-
-Improved localization.
-
-### Integrated Gradients
-
-Feature attribution.
-
-### Attention Maps
-
-Transformer explainability.
-
-## Outputs
-
-```text
-Original Image
-Heatmap Overlay
-Attention Regions
-Explanation Report
-```
-
-## Storage
-
-Store generated explainability artifacts separately.
-
----
-
-# Phase 7 — Clinical AI Summary Service
-
-## Goals
-
-Generate readable AI-assisted reports.
-
-## Inputs
-
-* Prediction
-* Confidence
-* Heatmap
-* Metadata
-
-## Example Summary
-
-```text
-Potential indicators consistent with pneumonia.
-
-Primary attention areas:
-- Left lower lobe
-- Perihilar opacity
-
-Confidence:
-94%
-
-Radiologist review recommended.
-```
-
-## Safety Requirements
-
-The system must:
-
-* Never claim diagnosis certainty
-* Clearly label outputs as AI-generated
-* Require clinician review
-
----
-
-# Phase 8 — Triage & Prioritization Engine
-
-## Goals
-
-Prioritize urgent cases.
-
-## Severity Formula
-
-```python
-severity_score = (
-    confidence
-    * disease_risk
-    * heatmap_extent
-    * calibration_factor
-)
-```
-
-## Priority Levels
-
-### Critical
-
-Immediate review required.
-
-### High
-
-Review within short timeframe.
-
-### Medium
-
-Routine review.
-
-### Low
-
-Non-urgent.
-
-## Example Queue
-
-```text
-Patient A
-Severity: 0.92
-
-Patient B
-Severity: 0.74
-
-Patient C
-Severity: 0.41
-```
-
----
-
-# Phase 9 — Multi-Image Case Analysis
-
-## Goals
-
-Analyze complete patient studies.
-
-## Inputs
-
-```text
-MRI
-CT
-X-Ray
-Ultrasound
-```
-
-## Outputs
-
-### Unified Case Summary
-
-Aggregate findings across studies.
-
-### Severity Ranking
-
-Single severity score.
-
-### Clinical Overview
-
-Cross-study interpretation.
-
----
-
-# Phase 10 — Human Review Workflow
-
-## Goals
-
-Keep humans in control.
-
-## Review Actions
-
-### Accept
-
-Agree with AI.
-
-### Reject
-
-Disagree with AI.
-
-### Unsure
-
-Requires additional review.
-
-## Tracking
-
-Store:
-
-* AI prediction
-* Human decision
-* Reviewer
-* Timestamp
-
-## Analytics
-
-Calculate:
-
-* Sensitivity
-* Specificity
-* Precision
-* Recall
-* F1 Score
-
----
-
-# Phase 11 — Analytics Dashboard
-
-## Goals
-
-Measure system performance.
-
-## Operational Metrics
-
-* Cases processed
-* Average processing time
-* Queue size
-* Active users
-
-## Model Metrics
-
-* Accuracy
-* Precision
-* Recall
-* F1 Score
-* False positives
-* False negatives
-
-## Clinical Metrics
-
-* Agreement rate
-* Review turnaround time
-* Priority distribution
-
----
-
-# Phase 12 — Production Hardening
-
-## Security
-
-### Data Protection
-
-* Encryption at rest
-* Encryption in transit
-* Secrets management
-
-### Access Control
-
-* RBAC
-* Audit logs
-* Session monitoring
-
-## Reliability
-
-### Scaling
-
-* Horizontal scaling
-* Load balancing
-
-### Queues
-
-* Redis queues
-* Background workers
-
-### Fault Tolerance
-
-* Retry mechanisms
-* Circuit breakers
-
-## Monitoring
-
-### Metrics
-
-* Prometheus
-
-### Dashboards
-
-* Grafana
-
-### Error Tracking
-
-* Sentry
-
-### Tracing
-
-* OpenTelemetry
-
----
-
-# Recommended Directory Structure
-
-```text
-medical-ai-platform/
-
-├── apps
-│   ├── frontend
-│   ├── api-gateway
-│   ├── inference-service
-│   ├── explainability-service
-│   ├── triage-service
-│   └── auth-service
+AI-Medical-Assistant/
 │
-├── models
-│   ├── chest_xray
-│   ├── brain_mri
-│   ├── fracture_detection
-│   └── registry
+├── app.py
 │
-├── infrastructure
-│   ├── docker
-│   ├── kubernetes
-│   ├── terraform
-│   └── monitoring
+├── models/
+│   ├── brain_mri.py
+│   ├── knee_xray.py
+│   └── kidney_ultrasound.py
 │
-├── packages
-│   ├── shared
-│   ├── schemas
-│   ├── clients
-│   └── utils
+├── rag/
+│   ├── chroma_db/
+│   ├── ingest_docs.py
+│   └── retriever.py
 │
-├── storage
-│   ├── dicom
-│   ├── heatmaps
-│   ├── reports
-│   └── exports
+├── Authentication/
+│   ├── fastapi_backend.py
+│   └── supabase_auth.py
 │
-├── docs
-│   ├── architecture
-│   ├── api
-│   ├── deployment
-│   └── compliance
+├── frontend/
+│   ├── public/
+│   ├── src/
+│   │   ├── api/
+│   │   ├── components/
+│   │   ├── context/
+│   │   ├── pages/
+│   │   ├── App.jsx
+│   │   └── main.jsx
+│   │
+│   ├── package.json
+│   └── vite.config.js
 │
-├── tests
-│   ├── unit
-│   ├── integration
-│   └── e2e
-│
-└── scripts
+└── requirements.txt
 ```
 
-# Recommended MVP
+---
 
-Focus on a single imaging workflow first.
+# Core API Endpoints
 
-## MVP Scope
+## Diagnostic Inference
 
-### Chest X-Ray
+### Brain MRI
 
-Features:
+```http
+POST /predict/brain-mri
+```
 
-* Upload scan
-* AI prediction
-* Grad-CAM visualization
-* Clinical explanation
-* Severity ranking
-* Human review workflow
+Performs brain tumor detection and classification.
 
-Once validated, expand to:
+---
 
-* MRI
-* CT
-* Mammography
-* Ultrasound
-* Fracture detection
+### Knee Osteoarthritis
 
-The platform architecture remains the same; only specialized models are added.
+```http
+POST /predict/knee-xray
+```
+
+Performs automated Kellgren-Lawrence grading.
+
+---
+
+### Kidney Ultrasound
+
+```http
+POST /predict/kidney-ultrasound
+```
+
+Performs morphometric analysis and anomaly assessment.
+
+---
+
+## Medical Consultation
+
+```http
+POST /consult
+```
+
+Provides evidence-grounded clinical explanations using retrieval-augmented generation.
+
+### Input
+
+- Symptom descriptions
+- Diagnostic findings
+- Clinical questions
+
+### Output
+
+- Medical explanation
+- Supporting evidence
+- Clinical references
+
+---
+
+## Specialist Recommendation
+
+```http
+GET /find-doctors
+```
+
+Returns appropriate medical specialists based on findings and symptoms.
+
+---
+
+# Innovation Highlights
+
+### Evidence-Backed AI
+
+Every consultation is grounded using retrieved medical literature instead of relying solely on language model generation.
+
+### Multi-Modal Clinical Platform
+
+Three distinct diagnostic pipelines integrated into a single healthcare platform.
+
+### Explainable Predictions
+
+Confidence-aware outputs provide transparency beyond simple classification labels.
+
+### Clinical Decision Support
+
+Designed to assist healthcare professionals with evidence-backed recommendations.
+
+### Secure Architecture
+
+JWT-protected endpoints with Supabase authentication ensure secure access.
+
+---
+
+# Future Roadmap
+
+- Grad-CAM visual explainability
+- DICOM support
+- Clinical PDF report generation
+- Multi-language consultation support
+- Longitudinal patient tracking
+- Expanded imaging modalities
+- Healthcare provider dashboard
+
+---
+
+# Impact
+
+AI Medical Assistant combines:
+
+- Medical Imaging AI
+- Retrieval-Augmented Generation
+- Explainable AI
+- Evidence-Based Reasoning
+- Clinical Decision Support
+
+into a single platform focused on improving trust, transparency, and usability in healthcare AI systems.
+
+---
+
+# Disclaimer
+
+> AI Medical Assistant is a Clinical Decision Support (CDS) platform developed for educational, research, and demonstration purposes. It is not a medical device and should not replace professional medical judgment, diagnosis, or treatment. All outputs must be reviewed and validated by qualified healthcare professionals before clinical use.
