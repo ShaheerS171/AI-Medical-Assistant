@@ -1,12 +1,14 @@
 <div align="center">
 
-<img src="./assets/logo.png" width="120">
+<img src="https://github.com/user-attachments/assets/c0892814-f3f1-4758-893a-9cf4d505ff6f" alt="AI Medical Assistant Logo" width="200">
 
 # AI Medical Assistant
 
 ### Multi-Modal Clinical Decision Support Platform
 
-**An AI-powered healthcare platform that combines Computer Vision, Retrieval-Augmented Generation, and Explainable AI to deliver evidence-backed clinical insights.**
+**An AI-powered healthcare platform that combines Computer Vision, Retrieval-Augmented Generation, and Explainable Diagnostics to deliver evidence-backed clinical insights.**
+
+</div>
 
 <p>
 
@@ -36,7 +38,7 @@
 
 ## Built For
 
-**[Hackathon Name 2026]**
+**[Ali BABA AI Hackathon]**
 
 ---
 
@@ -91,7 +93,7 @@ The result is a transparent AI workflow designed to increase clinician trust and
 ## Demo
 
 <p align="center">
-  <img src="./assets/dashboard.png" width="100%">
+  <img src="https://github.com/user-attachments/assets/429a91d2-57c2-44dc-b3e0-d5b780b72056" alt="AI Medical Assistant Dashboard" width="100%">
 </p>
 
 ### Live Application
