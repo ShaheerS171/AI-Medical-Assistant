@@ -71,15 +71,21 @@ class GradCAM:
 
         return cam
 
+import matplotlib.cm as cm
 
-def overlay_heatmap(original_image: Image.Image, heatmap: np.ndarray, alpha: float = 0.4) -> Image.Image:
+def overlay_heatmap(original_image: Image.Image, heatmap: np.ndarray, alpha: float = 0.5) -> Image.Image:
     base = original_image.convert("RGB").resize((IMG_SIZE, IMG_SIZE))
     base_arr = np.array(base).astype(np.float32)
 
-    heatmap_rgb = np.zeros_like(base_arr)
-    heatmap_rgb[..., 0] = heatmap * 255
+    # Use JET colormap. cm.jet(heatmap) returns (H, W, 4) in [0, 1]
+    color_map = cm.jet(heatmap)[..., :3] * 255.0
 
-    blended = (1 - alpha) * base_arr + alpha * heatmap_rgb
+    # The blend factor should be proportional to the heatmap activation.
+    # We take the square root of heatmap to slightly boost visibility of lower-activation areas
+    # and use a higher alpha (0.7) for a stronger color overlay.
+    blend_factor = (heatmap[..., np.newaxis] ** 0.5) * 0.7
+    
+    blended = (1 - blend_factor) * base_arr + blend_factor * color_map
     blended = np.clip(blended, 0, 255).astype(np.uint8)
     return Image.fromarray(blended)
 

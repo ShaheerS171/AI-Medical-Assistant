@@ -117,7 +117,8 @@ def run_consult_logic(
     if symptoms and symptoms.strip():
         try:
             pubmed_result = get_pubmed_citations(symptoms)
-        except Exception:
+        except Exception as e:
+            print("PUBMED ERROR:", e)
             pass  # graceful degradation — proceed without citations
 
     # ------------------------------------------------------------------

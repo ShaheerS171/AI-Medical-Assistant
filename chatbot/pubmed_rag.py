@@ -57,6 +57,8 @@ def extract_medical_keywords(symptoms: str) -> str:
         "and", "or", "but", "with", "my", "me", "of", "in", "is", "are", "was",
         "were", "for", "on", "at", "to", "it", "that", "this", "very", "quite",
         "little", "bit", "much", "more", "less", "please", "help",
+        "day", "days", "week", "weeks", "month", "months", "year", "years",
+        "ago", "since", "yesterday", "today", "had", "has", "got", "am", "feel", "like"
     }
     # lowercase, remove punctuation, split
     tokens = re.sub(r"[^\w\s]", " ", symptoms.lower()).split()
@@ -95,7 +97,8 @@ def search_pubmed(query: str, max_results: int = MAX_ABSTRACTS) -> List[str]:
         resp.raise_for_status()
         id_list = resp.json().get("esearchresult", {}).get("idlist", [])
         return id_list[:max_results]
-    except Exception:
+    except Exception as e:
+        print("PUBMED ESEARCH ERROR:", e)
         return []
 
 
@@ -120,13 +123,15 @@ def fetch_abstracts(pmids: List[str]) -> List[Dict[str, str]]:
     try:
         resp = requests.get(EFETCH_URL, params=params, timeout=HTTP_TIMEOUT)
         resp.raise_for_status()
-    except Exception:
+    except Exception as e:
+        print("PUBMED EFETCH ERROR:", e)
         return []
 
     articles = []
     try:
         root = ET.fromstring(resp.content)
-    except ET.ParseError:
+    except ET.ParseError as e:
+        print("PUBMED XML PARSE ERROR:", e)
         return []
 
     for article_node in root.findall(".//PubmedArticle"):
