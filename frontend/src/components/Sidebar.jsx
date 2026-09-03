@@ -23,7 +23,7 @@ export default function Sidebar({ activePage, setActivePage }) {
             <div className="sidebar">
                 {/* Logo */}
                 <div className="sidebar-logo">
-                    <div className="sidebar-logo-icon">🏥</div>
+                    <img src="/image.png" alt="Logo" className="sidebar-logo-icon" style={{ border: 'none', background: 'transparent', boxShadow: 'none' }} />
                     <div className="sidebar-logo-text">
                         <h2>AI Medical</h2>
                         <p>Clinical Support System</p>

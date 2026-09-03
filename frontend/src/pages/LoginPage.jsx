@@ -40,7 +40,7 @@ export default function LoginPage() {
             >
                 {/* Logo */}
                 <div className="auth-logo">
-                    <div className="icon-wrap">🏥</div>
+                    <img src="/image.png" alt="Logo" className="icon-wrap" style={{ border: 'none', background: 'transparent', padding: 0 }} />
                     <h1>AI Medical Assistant</h1>
                     <p>Clinical Diagnostic Support System</p>
                 </div>
