@@ -9,7 +9,7 @@
 **An AI-powered healthcare platform that combines Computer Vision, Retrieval-Augmented Generation, and Explainable Diagnostics to deliver evidence-backed clinical insights.**
 
 </div>
-
+<div align="center">
 <p>
 
 <img src="https://img.shields.io/badge/FastAPI-Backend-009688?style=flat-square&logo=fastapi&logoColor=white">
