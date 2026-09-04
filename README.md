@@ -20,18 +20,6 @@
 
 </p>
 
-<p>
-
-<a href="https://your-demo-link.com">
-  <img src="https://img.shields.io/badge/Live-Demo-success?style=for-the-badge">
-</a>
-
-<a href="https://youtube.com/watch?v=your-video">
-  <img src="https://img.shields.io/badge/Video-Demo-red?style=for-the-badge">
-</a>
-
-</p>
-
 </div>
 
 ---
