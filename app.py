@@ -129,6 +129,8 @@ class KidneyUltrasoundResponse(BaseModel):
     length_cm: float
     width_cm: float
     thickness_cm: float
+    annotated_long_b64: Optional[str] = None
+    annotated_trans_b64: Optional[str] = None
 
 
 class ConsultResponse(BaseModel):
@@ -343,10 +345,18 @@ async def predict_kidney_ultrasound(
             long_filename=longitudinal.filename or "unknown",
             trans_filename=transverse.filename or "unknown",
         )
+        def _pil_to_b64(img):
+            if not img: return None
+            buf = io.BytesIO()
+            img.save(buf, format="PNG")
+            return base64.b64encode(buf.getvalue()).decode()
+
         return KidneyUltrasoundResponse(
             length_cm=res["length_cm"],
             width_cm=res["width_cm"],
             thickness_cm=res["thickness_cm"],
+            annotated_long_b64=_pil_to_b64(res.get("annotated_longitudinal")),
+            annotated_trans_b64=_pil_to_b64(res.get("annotated_transverse")),
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Kidney ultrasound processing failed: {str(e)}")

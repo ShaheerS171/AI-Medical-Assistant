@@ -221,11 +221,15 @@ ${length_cm < 9 || width_cm < 4 ? 'Measurements suggest possible renal atrophy o
 
                         <motion.div variants={child} className="image-pair" style={{ marginBottom: '1.5rem' }}>
                             <div className="image-card">
-                                {longFile && <img src={URL.createObjectURL(longFile)} alt="Longitudinal" />}
+                                {results?.annotated_long_b64
+                                    ? <img src={`data:image/png;base64,${results.annotated_long_b64}`} alt="Longitudinal" />
+                                    : (longFile && <img src={URL.createObjectURL(longFile)} alt="Longitudinal" />)}
                                 <div className="image-caption">Longitudinal View — Length Axis</div>
                             </div>
                             <div className="image-card">
-                                {transFile && <img src={URL.createObjectURL(transFile)} alt="Transverse" />}
+                                {results?.annotated_trans_b64
+                                    ? <img src={`data:image/png;base64,${results.annotated_trans_b64}`} alt="Transverse" />
+                                    : (transFile && <img src={URL.createObjectURL(transFile)} alt="Transverse" />)}
                                 <div className="image-caption">Transverse View — Width & Thickness Axes</div>
                             </div>
                         </motion.div>
