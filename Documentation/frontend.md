@@ -1,44 +1,27 @@
-# React Frontend Conversion Documentation
+# React Frontend Documentation
 
 ## Overview
 
-This document describes the migration of the AI Medical Assistant user interface from Streamlit (`frontend.py`) to a modern React-based Single Page Application (SPA) built with Vite.
+The AI Medical Assistant user interface is a responsive, clinical-grade Single Page Application (SPA) built with **React**, **Vite**, and **Framer Motion**. 
 
-The conversion focuses exclusively on the frontend layer. No modifications are made to the FastAPI backend (`app.py`), machine learning models, authentication logic, inference pipelines, or business logic.
+The frontend connects directly to the unified **FastAPI** backend (`app.py`) via a centralized Axios API client (`src/api/client.js`) and leverages **Supabase** JWT tokens for secure authentication and route protection.
 
-The React application communicates with the existing FastAPI backend through REST APIs and preserves all functionality available in the Streamlit implementation while providing a more scalable, maintainable, and production-ready user experience.
-
----
-
-# Objectives
-
-The React frontend is designed to achieve the following goals:
-
-* Replace the Streamlit interface with a modern SPA architecture.
-* Preserve feature parity with the existing application.
-* Improve responsiveness and user experience.
-* Support authentication using Supabase JWT sessions.
-* Provide reusable UI components.
-* Enable future scalability and deployment.
-* Deliver a visually appealing healthcare-focused interface.
+The platform provides dedicated modules for four diagnostic vision modalities, a retrieval-augmented medical consultation chatbot, a geolocation-based doctor finder, automated LLM radiological report previewing, and server-side PDF generation.
 
 ---
 
 # Technology Stack
 
-## Core Framework
-
-| Technology       | Purpose                             |
-| ---------------- | ----------------------------------- |
-| React            | Frontend UI framework               |
-| Vite             | Build system and development server |
-| React Router DOM | Client-side routing                 |
-| Axios            | API communication                   |
-| Framer Motion    | Animations and transitions          |
-| React Toastify   | User notifications                  |
-| Supabase JS SDK  | Authentication                      |
-| React Markdown   | Safe rendering of generated reports |
-| Lucide React     | Icon system                         |
+| Technology | Role / Purpose |
+|---|---|
+| **React 18** | Component-driven UI framework |
+| **Vite** | Fast HMR build tool and development server |
+| **Framer Motion** | Micro-interactions, animated transitions, loading overlays |
+| **Axios** | HTTP client with automatic JWT bearer token interceptors |
+| **Supabase JS SDK** | User authentication and session persistence |
+| **React Markdown** | Safe rendering of 5-section AI radiological reports |
+| **Lucide React** | Medical and operational icon system (`Brain`, `Bone`, `ScanHeart`, `Activity`, etc.) |
+| **React Toastify** | Feedback notifications and toast alerts |
 
 ---
 
@@ -50,596 +33,190 @@ frontend/
 ├── package.json
 ├── vite.config.js
 ├── src/
-│
-├── main.jsx
-├── App.jsx
-├── index.css
-│
-├── api/
-│   └── client.js
-│
-├── context/
-│   └── AuthContext.jsx
-│
-├── components/
-│   ├── Sidebar.jsx
-│   ├── MetricCard.jsx
-│   ├── ReportBox.jsx
-│   ├── CitationPopover.jsx
-│   └── PatientForm.jsx
-│
-└── pages/
-    ├── LoginPage.jsx
-    ├── BrainMRIPage.jsx
-    ├── KneeXRayPage.jsx
-    ├── ChatbotPage.jsx
-    └── KidneyUltrasoundPage.jsx
+│   ├── main.jsx                   # React root mount point
+│   ├── App.jsx                    # Application shell, state router, and toast provider
+│   ├── App.css                    # App-level styling
+│   ├── index.css                  # Design system, themes, and responsive utility styles
+│   │
+│   ├── api/
+│   │   └── client.js              # Central Axios instance with Supabase JWT interceptors
+│   │
+│   ├── context/
+│   │   └── AuthContext.jsx        # Supabase authentication state and session lifecycle
+│   │
+│   ├── components/
+│   │   ├── Sidebar.jsx            # Desktop & mobile diagnostic navigation menu
+│   │   └── UploadZone.jsx         # Drag-and-drop image file uploader with preview
+│   │
+│   └── pages/
+│       ├── LoginPage.jsx          # Supabase sign-in and sign-up form
+│       ├── BrainMRIPage.jsx       # Brain MRI tumor detection & lesion quantification
+│       ├── KneeXRayPage.jsx       # Knee radiograph osteoarthritis KL grading
+│       ├── TuberculosisPage.jsx   # Chest X-ray Pulmonary Tuberculosis screening
+│       ├── KidneyUltrasoundPage.jsx # Kidney ultrasound morphometric measurement
+│       └── ChatbotPage.jsx        # Grounded consultation & LocationIQ doctor finder
 ```
 
 ---
 
-# Application Architecture
+# Application State & Navigation
 
-```text
-+---------------------------------------------------+
-|                 React Frontend                    |
-|                                                   |
-|  React Router                                     |
-|       │                                           |
-|       ▼                                           |
-|  Feature Pages                                    |
-|       │                                           |
-|       ▼                                           |
-|  Axios API Client                                 |
-|       │                                           |
-|       ▼                                           |
-|  FastAPI Backend                                  |
-|       │                                           |
-|       ├── Brain MRI Inference                     |
-|       ├── Knee OA Inference                       |
-|       ├── Kidney Ultrasound Analysis              |
-|       ├── Medical Chatbot                         |
-|       └── Doctor Finder                           |
-+---------------------------------------------------+
+Instead of heavy external routing dependencies, the core application shell (`App.jsx`) utilizes a clean, animated tab-navigation router pattern:
+
+```jsx
+const PAGE_MAP = {
+  brain: BrainMRIPage,
+  knee: KneeXRayPage,
+  tb: TuberculosisPage,
+  chat: ChatbotPage,
+  kidney: KidneyUltrasoundPage,
+};
 ```
+
+### Navigation Items in `Sidebar.jsx`:
+1. **Brain MRI** (`id: 'brain'`) — Tumor Detection & Segmentation
+2. **Knee X-Ray** (`id: 'knee'`) — Kellgren-Lawrence Osteoarthritis Severity
+3. **Chest X-Ray** (`id: 'tb'`) — Pulmonary Tuberculosis Screening
+4. **Medical Consultation** (`id: 'chat'`) — Evidence-based Consultation & Doctor Finder
+5. **Kidney Ultrasound** (`id: 'kidney'`) — DeepLabV3+ Morphometric Measurement
 
 ---
 
-# Authentication Flow
+# Authentication Architecture
 
-## Authentication Provider
+Authentication is managed via `src/context/AuthContext.jsx` interfacing with Supabase:
 
-Authentication is handled through Supabase.
-
-### Process
-
-1. User signs in or registers.
-2. Supabase returns an authenticated session.
-3. JWT token is stored in local storage.
-4. AuthContext maintains global session state.
-5. Axios automatically attaches the JWT to requests.
-6. Backend validates the JWT for protected endpoints.
-
-### Authorization Header
-
-```http
-Authorization: Bearer <JWT_TOKEN>
-```
+1. **Sign-In / Sign-Up**: Handled in `LoginPage.jsx` via `supabase.auth.signInWithPassword` or `signUp`.
+2. **Session Persistence**: Stored in `localStorage` as `auth_token`.
+3. **Axios Interceptor**:
+   ```javascript
+   // src/api/client.js
+   client.interceptors.request.use((config) => {
+       const token = localStorage.getItem('auth_token');
+       if (token) config.headers['Authorization'] = `Bearer ${token}`;
+       return config;
+   });
+   ```
+4. **Route Guard**: `AppInner` in `App.jsx` intercepts unauthenticated sessions and renders `LoginPage` until a valid session is verified.
 
 ---
 
-# API Client
+# Feature Modules & Workflows
 
-## File
-
-```text
-src/api/client.js
-```
-
-### Responsibilities
-
-* Create a centralized Axios instance.
-* Configure backend base URL.
-* Attach JWT tokens automatically.
-* Handle authentication failures.
-* Simplify API communication across pages.
-
-### Request Flow
-
-```text
-Page
-  ↓
-Axios Client
-  ↓
-JWT Interceptor
-  ↓
-FastAPI Endpoint
-  ↓
-Response
-  ↓
-React Component
-```
+## 1. Chest X-Ray — Tuberculosis Screening
+- **Component**: `src/pages/TuberculosisPage.jsx`
+- **Inference Route**: `POST /predict/tb-xray` (multipart form: `file`, `age`, `sex`)
+- **Report Route**: `POST /generate/report` (modality: `tb-xray`)
+- **PDF Export**: `POST /export/pdf`
+- **Workflow & UI Elements**:
+  - Drag-and-drop chest X-ray uploader.
+  - Patient intake form: Full Name, Patient ID, Age, Biological Sex, and Clinical Symptoms.
+  - Animated analysis spinner during DenseNet121 inference & Grad-CAM generation.
+  - Side-by-side visual comparison: Original Chest X-Ray vs. Grad-CAM Saliency Overlay.
+  - Diagnostic metrics:
+    - Primary Diagnosis (`Normal` / `Tuberculosis`) with conditional color badges.
+    - Confidence Percentage.
+    - Class Probabilities breakdown (`Normal: %`, `Tuberculosis: %`).
+  - Formatted 5-section radiological report preview rendered in `ReactMarkdown`.
+  - Offline structured fallback report generator if LLM API is unavailable.
+  - "Download PDF Report" action generating an official signed medical document.
 
 ---
 
-# Routing
-
-## Route Configuration
-
-| Route              | Component            |
-| ------------------ | -------------------- |
-| /login             | LoginPage            |
-| /brain-mri         | BrainMRIPage         |
-| /knee-xray         | KneeXRayPage         |
-| /chatbot           | ChatbotPage          |
-| /kidney-ultrasound | KidneyUltrasoundPage |
-
----
-
-# Feature Modules
-
-## Brain MRI Tumor Detection
-
-### Page
-
-```text
-BrainMRIPage.jsx
-```
-
-### Purpose
-
-Provides MRI-based tumor classification and diagnostic analysis.
-
-### Endpoint
-
-```http
-POST /predict/brain-mri
-```
-
-### Workflow
-
-1. Upload MRI image.
-2. Submit image to backend.
-3. Receive prediction results.
-4. Display:
-
-   * Tumor classification
-   * Confidence score
-   * Diagnostic interpretation
-   * Supporting metrics
-5. Allow result export.
-
-### Output Components
-
-* MetricCard
-* ReportBox
-* Result Summary Panel
+## 2. Brain MRI — Tumor Detection & Quantification
+- **Component**: `src/pages/BrainMRIPage.jsx`
+- **Inference Route**: `POST /predict/brain-mri`
+- **Report Route**: `POST /generate/report` (modality: `brain-mri`)
+- **PDF Export**: `POST /export/pdf`
+- **Workflow & UI Elements**:
+  - Upload of brain MRI axial slices.
+  - Patient intake metadata collection.
+  - Dual visual overlays: Grad-CAM attention heatmap and YOLO lesion bounding boxes.
+  - Lesion surface area metrics (`mm²` and `cm²`).
+  - 5-section neuro-radiological report generation and PDF download.
 
 ---
 
-## Knee Osteoarthritis Detection
-
-### Page
-
-```text
-KneeXRayPage.jsx
-```
-
-### Endpoint
-
-```http
-POST /predict/knee-xray
-```
-
-### Workflow
-
-1. Upload X-ray image.
-2. Send image to inference endpoint.
-3. Receive KL grading prediction.
-4. Display:
-
-   * OA severity grade
-   * Confidence score
-   * Clinical interpretation
-
-### Output Components
-
-* MetricCard
-* ReportBox
+## 3. Knee Radiograph — Osteoarthritis Grading
+- **Component**: `src/pages/KneeXRayPage.jsx`
+- **Inference Route**: `POST /predict/knee-xray`
+- **Report Route**: `POST /generate/report` (modality: `knee-xray`)
+- **PDF Export**: `POST /export/pdf`
+- **Workflow & UI Elements**:
+  - Upload of knee AP radiograph.
+  - Kellgren-Lawrence (KL Grade 0 to 4) severity assessment.
+  - Temperature-scaled calibration status indicator.
+  - Grad-CAM joint space and osteophyte attention heatmap.
+  - Clinical report generation and PDF export.
 
 ---
 
-## Kidney Ultrasound Morphometry
-
-### Page
-
-```text
-KidneyUltrasoundPage.jsx
-```
-
-### Endpoint
-
-```http
-POST /predict/kidney-ultrasound
-```
-
-### Workflow
-
-1. Upload ultrasound image.
-2. Submit image for analysis.
-3. Receive kidney measurements.
-4. Display:
-
-   * Morphometric metrics
-   * Diagnostic insights
-   * Structured findings
+## 4. Kidney Ultrasound — Morphometry
+- **Component**: `src/pages/KidneyUltrasoundPage.jsx`
+- **Inference Route**: `POST /predict/kidney-ultrasound` (accepts longitudinal and transverse views)
+- **Report Route**: `POST /generate/report` (modality: `kidney-ultrasound`)
+- **PDF Export**: `POST /export/pdf`
+- **Workflow & UI Elements**:
+  - Dual ultrasound image uploader (Coronal/Longitudinal and Transverse).
+  - DeepLabV3+ segmented contour overlays.
+  - Calculated dimensions: Length (cm), Width (cm), and Thickness (cm).
+  - Normal adult reference comparisons and nephromegaly/atrophy assessment.
 
 ---
 
-## Medical Chatbot
-
-### Page
-
-```text
-ChatbotPage.jsx
-```
-
-### Endpoint
-
-```http
-POST /consult
-```
-
-### Features
-
-* Medical question answering
-* Symptom guidance
-* Health recommendations
-* Urgency classification
-
-### Workflow
-
-1. User enters question.
-2. Request sent to chatbot endpoint.
-3. Response displayed.
-4. Urgency badge rendered.
+## 5. Evidence-Grounded Consultation & Doctor Finder
+- **Component**: `src/pages/ChatbotPage.jsx`
+- **Consult Route**: `POST /consult` (symptoms, optional PDF report upload)
+- **Doctor Route**: `GET /find-doctors` (location, specialty, radius)
+- **Workflow & UI Elements**:
+  - Multi-turn conversational interface with typing indicators.
+  - RAG-powered responses with verified medical citations and urgency triage tags.
+  - Interactive doctor finder powered by LocationIQ: searches for nearby specialists, hospitals, and clinics with distance calculations.
 
 ---
 
-## Doctor Finder
+# PDF Report Generation Pipeline
 
-### Page
+The frontend requests formal PDF reports by sending diagnostic data directly to the backend's `/export/pdf` endpoint:
 
-```text
-ChatbotPage.jsx
+```javascript
+const req = {
+    patient_name: form.name,
+    patient_id: form.id,
+    patient_age: Number(form.age),
+    patient_sex: form.sex,
+    patient_history: form.history,
+    report_text: results.report,
+    scan_type: "Chest X-Ray (Tuberculosis Screening)",
+    original_img_b64: base64OriginalImage,
+    overlay_img_b64: results.gradcam_b64 || "",
+    metrics: {
+        "Diagnosis": results.predicted_class,
+        "Confidence": `${(results.confidence * 100).toFixed(1)}%`,
+        "Probabilities": `TB: ${tbProb} | Normal: ${normProb}`
+    }
+};
+
+const res = await client.post('/export/pdf', req, { responseType: 'blob' });
 ```
 
-### Endpoint
-
-```http
-GET /find-doctors
-```
-
-### Workflow
-
-1. User enters location.
-2. Backend returns nearby doctors.
-3. Results displayed as cards.
+The backend compiles an in-memory PDF via ReportLab, returning a binary blob that is downloaded directly in the user's browser.
 
 ---
 
-# Shared Components
+# Running and Building the Frontend
 
-## Sidebar
-
-### File
-
-```text
-components/Sidebar.jsx
-```
-
-### Responsibilities
-
-* Navigation
-* Route switching
-* Mobile responsiveness
-* User profile display
-
----
-
-## MetricCard
-
-### File
-
-```text
-components/MetricCard.jsx
-```
-
-### Responsibilities
-
-Display numerical metrics including:
-
-* Confidence scores
-* Measurements
-* Predictions
-* Risk levels
-
----
-
-## ReportBox
-
-### File
-
-```text
-components/ReportBox.jsx
-```
-
-### Responsibilities
-
-Display generated diagnostic content and structured findings.
-
----
-
-## CitationPopover
-
-### File
-
-```text
-components/CitationPopover.jsx
-```
-
-### Responsibilities
-
-Display supporting references and citations when available.
-
----
-
-## PatientForm
-
-### File
-
-```text
-components/PatientForm.jsx
-```
-
-### Responsibilities
-
-Collect patient metadata and diagnostic inputs.
-
----
-
-# Design System
-
-## Color Palette
-
-### Primary Background
-
-```css
-#0F1B2D
-```
-
-### Accent
-
-```css
-#00D4B4
-```
-
-### Text
-
-```css
-#E8F4FD
-```
-
----
-
-## Typography
-
-### Font Family
-
-```css
-Inter
-```
-
-Imported through Google Fonts.
-
----
-
-# Visual Design Principles
-
-## Glass Morphism
-
-Used for:
-
-* Sidebar panels
-* Results containers
-* Information cards
-
-Example characteristics:
-
-```css
-backdrop-filter: blur()
-rgba transparency
-soft shadows
-rounded borders
-```
-
----
-
-## Animation System
-
-Implemented using Framer Motion.
-
-### Features
-
-* Page transitions
-* Fade-in animations
-* Staggered card reveals
-* Loading indicators
-* Interactive hover effects
-
----
-
-## Responsive Design
-
-### Desktop
-
-* Fixed navigation sidebar
-* Multi-column layout
-
-### Tablet
-
-* Collapsible sidebar
-* Adaptive content spacing
-
-### Mobile
-
-* Bottom navigation
-* Single-column layout
-* Touch-optimized controls
-
----
-
-# Result Presentation Strategy
-
-Because the existing FastAPI backend does not expose a dedicated report-generation endpoint:
-
-## Current Approach
-
-1. Call prediction endpoint.
-2. Receive structured prediction data.
-3. Display results using React components.
-4. Render metrics and interpretations directly.
-
-This preserves all functionality already available in the backend.
-
----
-
-# PDF Export Strategy
-
-The current backend does not expose a standalone PDF export API.
-
-## Frontend Solution
-
-The React application provides a printable report view.
-
-Workflow:
-
-```text
-Prediction Result
-      ↓
-Formatted Report View
-      ↓
-window.print()
-      ↓
-Save as PDF
-```
-
-This maintains export capability without backend modifications.
-
----
-
-# Development Environment
-
-## Backend
-
-```bash
-cd /home/shaheer/python/AI-Medical-Assistant
-
-uvicorn app:app --reload --port 8000
-```
-
-Backend URL:
-
-```text
-http://localhost:8000
-```
-
----
-
-## Frontend
-
+### Development Mode
 ```bash
 cd frontend
-
 npm install
-
 npm run dev
 ```
+Default local URL: `http://localhost:5173`
 
-Frontend URL:
-
-```text
-http://localhost:5173
+### Production Build
+```bash
+cd frontend
+npm run build
 ```
-
----
-
-# Verification Checklist
-
-## Authentication
-
-* Login page loads correctly.
-* User registration succeeds.
-* JWT token stored successfully.
-* Protected routes require authentication.
-
----
-
-## Brain MRI Module
-
-* Image upload works.
-* API request succeeds.
-* Prediction results render.
-* Metrics display correctly.
-
----
-
-## Knee Osteoarthritis Module
-
-* X-ray upload succeeds.
-* Prediction returned successfully.
-* KL grading displayed correctly.
-
----
-
-## Kidney Ultrasound Module
-
-* Ultrasound upload succeeds.
-* Measurements render correctly.
-* Findings appear in result panel.
-
----
-
-## Medical Chatbot
-
-* Question submission works.
-* Responses render correctly.
-* Urgency indicators display properly.
-
----
-
-## Doctor Finder
-
-* Location search works.
-* Doctor list renders successfully.
-* Results remain responsive across devices.
-
----
-
-# Deployment Readiness
-
-The React frontend is designed for deployment on modern hosting platforms including:
-
-* Vercel
-* Netlify
-* AWS Amplify
-* Cloudflare Pages
-* Self-hosted Nginx environments
-
-No backend modifications are required for deployment beyond configuring the API base URL and CORS settings.
-
----
-
-# Conclusion
-
-The React frontend conversion modernizes the AI Medical Assistant user experience while preserving complete compatibility with the existing FastAPI backend. The architecture introduces reusable components, responsive layouts, animation support, secure authentication integration, and scalable frontend practices suitable for production deployment.
+Generates optimized static assets in `frontend/dist/` ready for deployment on Vercel, Netlify, AWS S3/CloudFront, or Nginx.
