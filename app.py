@@ -30,6 +30,7 @@ from knee_model.src.inference import KneeOAPredictor
 from knee_model.src.gradcam import run_gradcam
 from tumor_model.src.inference import BrainTumorPredictor
 from kidney_model.src.inference import KidneyUltrasoundPredictor
+from tb_model.src.inference import TBPredictor
 from explainability.mistral_engine import MedicalExplainerAPI
 from explainability.pdf_generator import MedicalReportPDFGenerator
 from chatbot.engine import run_consult_logic, find_doctors_logic
@@ -50,6 +51,7 @@ app.add_middleware(
 _knee_predictor: Optional[KneeOAPredictor] = None
 _tumor_predictor: Optional[BrainTumorPredictor] = None
 _kidney_predictor: Optional[KidneyUltrasoundPredictor] = None
+_tb_predictor: Optional[TBPredictor] = None
 _explainer_api: Optional[MedicalExplainerAPI] = None
 _pdf_generator: Optional[MedicalReportPDFGenerator] = None
 
@@ -82,6 +84,13 @@ def get_kidney_predictor() -> KidneyUltrasoundPredictor:
             excel_path="kidney_model/OpenKidneyUltrasoundDataSet_TransducerInfo.xlsx",
         )
     return _kidney_predictor
+
+
+def get_tb_predictor() -> TBPredictor:
+    global _tb_predictor
+    if _tb_predictor is None:
+        _tb_predictor = TBPredictor()
+    return _tb_predictor
 
 
 def get_explainer_api() -> MedicalExplainerAPI:
@@ -123,6 +132,14 @@ class KneeXRayPredictionResponse(BaseModel):
     confidence: float
     calibrated: bool
     gradcam_b64: Optional[str] = None
+
+
+class TBPredictionResponse(BaseModel):
+    predicted_class: str
+    confidence: float
+    probabilities: Dict[str, float]
+    gradcam_b64: Optional[str] = None
+    gradcam_note: Optional[str] = None
 
 
 class KidneyUltrasoundResponse(BaseModel):
@@ -275,6 +292,16 @@ def generate_clinical_report(
                 confidence=conf,
                 patient_info=patient_dict,
             )
+        elif req.modality in ("tb-xray", "tb", "tuberculosis"):
+            pred_class = req.prediction_data.get("predicted_class", "Normal")
+            conf = float(req.prediction_data.get("confidence", 0.0))
+            probs = req.prediction_data.get("probabilities", {})
+            report_text = explainer.generate_tb_report(
+                predicted_class=pred_class,
+                confidence=conf,
+                patient_info=patient_dict,
+                probabilities=probs,
+            )
         elif req.modality in ("kidney-ultrasound", "kidney"):
             length_cm = float(req.prediction_data.get("length_cm", 10.0))
             width_cm = float(req.prediction_data.get("width_cm", 5.0))
@@ -382,6 +409,38 @@ async def predict_knee_xray(
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Knee X-Ray processing failed: {str(e)}")
+
+
+@app.post("/predict/tb-xray", response_model=TBPredictionResponse)
+async def predict_tb_xray(
+    file: UploadFile = File(...),
+    age: float = Form(33.0),
+    sex: str = Form("unknown"),
+    current_user: dict = Depends(get_current_user)
+):
+    if not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Uploaded file must be an image.")
+
+    contents = await file.read()
+
+    try:
+        predictor = get_tb_predictor()
+        res = predictor.predict(
+            image_input=contents,
+            age=age,
+            sex=sex,
+            include_gradcam=True
+        )
+
+        return TBPredictionResponse(
+            predicted_class=res["label"],
+            confidence=float(res["confidence"]),
+            probabilities=res["probabilities"],
+            gradcam_b64=res.get("gradcam_overlay_png_base64"),
+            gradcam_note=res.get("gradcam_note"),
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Tuberculosis X-Ray processing failed: {str(e)}")
 
 
 @app.post("/predict/kidney-ultrasound", response_model=KidneyUltrasoundResponse)

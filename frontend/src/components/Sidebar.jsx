@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import {
-    Brain, Bone, MessageSquare, Activity,
+    Brain, Bone, MessageSquare, Activity, ScanHeart,
     ChevronRight, LogOut, Menu, X
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -9,6 +9,7 @@ import { useAuth } from '../context/AuthContext';
 const NAV_ITEMS = [
     { id: 'brain', label: 'Brain MRI', sub: 'Tumor Detection', icon: Brain },
     { id: 'knee', label: 'Knee X-Ray', sub: 'Osteoarthritis', icon: Bone },
+    { id: 'tb', label: 'Chest X-Ray', sub: 'Tuberculosis Screening', icon: ScanHeart },
     { id: 'chat', label: 'Medical Consultation', sub: 'Chat & Doctor Finder', icon: MessageSquare },
     { id: 'kidney', label: 'Kidney Ultrasound', sub: 'Morphometry', icon: Activity },
 ];

@@ -254,3 +254,76 @@ Keep the language formal, precise, and authoritative.
         )
 
         return response.choices[0].message.content
+
+    def generate_tb_report(
+        self,
+        predicted_class: str,
+        confidence: float,
+        patient_info: Optional[Dict[str, Any]] = None,
+        probabilities: Optional[Dict[str, float]] = None,
+    ) -> str:
+        patient_info = patient_info or {}
+        patient_name = patient_info.get("name", "Unspecified")
+        patient_id = patient_info.get("id", "N/A")
+        age = patient_info.get("age", "Unspecified")
+        sex = patient_info.get("sex", "Unspecified")
+        history = patient_info.get("history", "No clinical history provided.")
+
+        prob_str = ""
+        if probabilities:
+            prob_str = f" (Probabilities: Normal: {probabilities.get('Normal', 0.0)*100:.1f}%, Tuberculosis: {probabilities.get('Tuberculosis', 0.0)*100:.1f}%)"
+
+        prompt = f"""
+You are an expert Thoracic Radiology AI Assistant. Generate a formal 5-section medical report based on patient intake data and automated chest radiograph (X-ray) classification for Pulmonary Tuberculosis.
+
+### Patient & Examination Header
+- Patient Name: {patient_name}
+- Patient ID: {patient_id}
+- Age / Sex: {age} / {sex}
+- Imaging Modality: Posteroanterior (PA) Chest Radiograph (X-Ray)
+
+### Machine Vision Findings:
+- Classified Finding: {predicted_class.upper()}
+- Vision Model Confidence: {confidence * 100:.1f}%{prob_str}
+- Clinical History / Indication: {history}
+
+Generate a formal medical draft structured strictly under these 5 Markdown section headers:
+
+1. **Patient & Examination Header**
+   Summarize patient demographics, imaging modality, examination parameters, and model prediction with confidence score.
+
+2. **Clinical History & Indication**
+   Synthesize the presented patient history ({history}), presenting symptoms (e.g. chronic cough, fever, night sweats, hemoptysis, weight loss), and diagnostic indication for chest radiography.
+
+3. **Technique & Visual Observations**
+   Describe the PA chest radiograph technical adequacy, pulmonary parenchymal evaluation, and Grad-CAM saliency activation focus (e.g. apical or upper-lobe opacities, consolidation patterns, or clear lung fields).
+
+4. **Detailed Radiological Findings**
+   Provide a detailed radiological evaluation focusing on indicators of pulmonary tuberculosis:
+   - Apical and subapical fibronodular infiltrates or consolidation
+   - Cavitary lesions or bronchogenic spread
+   - Hilar and mediastinal lymphadenopathy
+   - Pleural effusion or thickening
+   If {predicted_class.upper()} is Normal, describe clear lung fields without focal consolidation, pneumothorax, or abnormal pleural thickening.
+
+5. **Impression & Clinical Recommendations**
+   Deliver a definitive radiological impression and actionable next steps:
+   - For suspected/positive Tuberculosis: immediate acid-fast bacilli (AFB) sputum smear microscopy, mycobacterial culture, rapid molecular assay (GeneXpert MTB/RIF), contrast-enhanced thoracic CT, airborne isolation precautions, and infectious disease referral.
+   - For Normal: clinical correlation with ongoing symptoms, routine monitoring, or alternative diagnostic workup if symptoms persist.
+
+Keep the language formal, precise, and authoritative.
+"""
+
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are a specialized medical reasoning AI generating professional thoracic radiology reports.",
+                },
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0.3,
+        )
+
+        return response.choices[0].message.content

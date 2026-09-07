@@ -7,12 +7,14 @@ import BrainMRIPage from './pages/BrainMRIPage';
 import KneeXRayPage from './pages/KneeXRayPage';
 import ChatbotPage from './pages/ChatbotPage';
 import KidneyUltrasoundPage from './pages/KidneyUltrasoundPage';
+import TuberculosisPage from './pages/TuberculosisPage';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
 const PAGE_MAP = {
   brain: BrainMRIPage,
   knee: KneeXRayPage,
+  tb: TuberculosisPage,
   chat: ChatbotPage,
   kidney: KidneyUltrasoundPage,
 };

@@ -1,0 +1,9 @@
+{
+  "label": "Tuberculosis",
+  "confidence": 0.9433,
+  "probabilities": {
+    "Normal": 0.0567,
+    "Tuberculosis": 0.9433
+  },
+  "overlay_file": "prediction_004.png"
+}
