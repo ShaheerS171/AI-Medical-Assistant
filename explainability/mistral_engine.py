@@ -13,16 +13,37 @@ class MedicalExplainerAPI:
     and patient metadata.
     """
 
-    def __init__(self, api_key: Optional[str] = None, model_name: Optional[str] = None):
-        key = api_key or os.getenv("MISTRAL_API_KEY")
+    def __init__(self, api_key: Optional[str] = None, model_name: Optional[str] = None, base_url: Optional[str] = None):
+        key = (
+            api_key
+            or os.getenv("LLM_API_KEY")
+            or os.getenv("DEEPSEEK_API_KEY")
+            or os.getenv("MISTRAL_API_KEY")
+            or os.getenv("OPENAI_API_KEY")
+        )
         if not key:
-            raise ValueError("MISTRAL_API_KEY is not set in environment or .env file.")
+            raise ValueError(
+                "LLM API Key is missing. Please set LLM_API_KEY (or DEEPSEEK_API_KEY / MISTRAL_API_KEY) in .env."
+            )
 
-        self.model = model_name or os.getenv("MISTRAL_MODEL", "mistral-large-latest")
+        self.model = (
+            model_name
+            or os.getenv("LLM_MODEL")
+            or os.getenv("DEEPSEEK_MODEL")
+            or os.getenv("MISTRAL_MODEL")
+            or "deepseek-chat"
+        )
+
+        resolved_base_url = (
+            base_url
+            or os.getenv("LLM_BASE_URL")
+            or os.getenv("DEEPSEEK_BASE_URL")
+            or ("https://api.mistral.ai/v1" if os.getenv("MISTRAL_API_KEY") and not (os.getenv("LLM_API_KEY") or os.getenv("DEEPSEEK_API_KEY")) else "https://api.deepseek.com/v1")
+        )
 
         self.client = OpenAI(
             api_key=key,
-            base_url="https://api.mistral.ai/v1",
+            base_url=resolved_base_url,
             default_headers={"Accept-Encoding": "gzip, deflate"}
         )
 

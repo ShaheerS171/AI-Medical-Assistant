@@ -31,7 +31,22 @@ export default function KneeXRayPage() {
             const fd = new FormData();
             fd.append('file', file);
             const { data } = await client.post('/predict/knee-xray', fd);
-            setResults({ ...data, report: buildReport(data, form) });
+
+            // Generate report using AI Explainability Engine (DeepSeek / LLM)
+            let report = '';
+            try {
+                const repRes = await client.post('/generate/report', {
+                    modality: 'knee-xray',
+                    patient_info: form,
+                    prediction_data: data
+                });
+                report = repRes.data.report;
+            } catch (llmErr) {
+                console.warn('AI LLM report generation failed, using structured template fallback:', llmErr);
+                report = buildReport(data, form);
+            }
+
+            setResults({ ...data, report });
         } catch (err) {
             setError(err.response?.data?.detail || err.message || 'Analysis failed.');
         } finally {

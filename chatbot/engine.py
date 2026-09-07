@@ -20,8 +20,19 @@ load_dotenv()
 MISTRAL_CHAT_URL = "https://api.mistral.ai/v1/chat/completions"
 MISTRAL_OCR_URL = "https://api.mistral.ai/v1/ocr"
 
-TEXT_MODEL = "mistral-small-latest"
-VISION_MODEL = "pixtral-12b-2409"
+def get_text_model() -> str:
+    return (
+        os.getenv("LLM_MODEL")
+        or os.getenv("DEEPSEEK_MODEL")
+        or ("deepseek-chat" if (os.getenv("DEEPSEEK_API_KEY") or os.getenv("LLM_API_KEY")) else os.getenv("MISTRAL_MODEL", "mistral-small-latest"))
+    )
+
+def get_vision_model() -> str:
+    return (
+        os.getenv("VISION_MODEL")
+        or os.getenv("MISTRAL_VISION_MODEL")
+        or "pixtral-12b-2409"
+    )
 
 MEDICAL_SYSTEM_PROMPT = """You are a cautious medical information assistant embedded in a health app.
 You are NOT a doctor and must never claim to give a diagnosis.
@@ -49,21 +60,44 @@ DEFAULT_DISCLAIMER = "This is not a medical diagnosis. Please consult a licensed
 HTTP_HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) MedicalAssistantApp/1.0"}
 
 
-def get_mistral_api_key(custom_key: Optional[str] = None) -> Optional[str]:
+def get_llm_api_key(custom_key: Optional[str] = None) -> Optional[str]:
     if custom_key and custom_key.strip():
         return custom_key.strip()
-    key = os.getenv("MISTRAL_API_KEY")
-    return key.strip() if key else None
+    for env_var in ("LLM_API_KEY", "DEEPSEEK_API_KEY", "MISTRAL_API_KEY", "OPENAI_API_KEY"):
+        val = os.getenv(env_var)
+        if val and val.strip():
+            return val.strip()
+    return None
+
+# Keep backwards-compatible alias
+get_mistral_api_key = get_llm_api_key
 
 
-def _mistral_headers(custom_key: Optional[str] = None) -> dict:
-    key = get_mistral_api_key(custom_key)
+def get_llm_chat_url() -> str:
+    # If custom endpoint or base URL provided
+    if os.getenv("LLM_CHAT_URL"):
+        return os.getenv("LLM_CHAT_URL").strip()
+    base_url = os.getenv("LLM_BASE_URL") or os.getenv("DEEPSEEK_BASE_URL")
+    if base_url:
+        return f"{base_url.rstrip('/')}/chat/completions"
+    if os.getenv("DEEPSEEK_API_KEY") or os.getenv("LLM_API_KEY"):
+        return "https://api.deepseek.com/v1/chat/completions"
+    if os.getenv("MISTRAL_API_KEY"):
+        return "https://api.mistral.ai/v1/chat/completions"
+    return "https://api.deepseek.com/v1/chat/completions"
+
+
+def get_llm_headers(custom_key: Optional[str] = None) -> dict:
+    key = get_llm_api_key(custom_key)
     if not key:
-        raise ValueError("Mistral API Key is missing. Please set MISTRAL_API_KEY in environment or app settings.")
+        raise ValueError("LLM API Key is missing. Please set LLM_API_KEY (or DEEPSEEK_API_KEY / MISTRAL_API_KEY) in .env or app settings.")
     return {
         "Authorization": f"Bearer {key}",
         "Content-Type": "application/json",
     }
+
+# Keep backwards-compatible alias
+_mistral_headers = get_llm_headers
 
 
 def _extract_json(raw_text: str) -> dict:
@@ -86,6 +120,14 @@ def _extract_json(raw_text: str) -> dict:
 
 
 def _ocr_pdf(b64_data: str, custom_key: Optional[str] = None) -> str:
+    # Mistral OCR endpoint specifically requires a Mistral key
+    mistral_key = custom_key or os.getenv("MISTRAL_API_KEY") or get_llm_api_key(custom_key)
+    if not mistral_key:
+        raise ValueError("Mistral API key is required for PDF OCR processing. Please set MISTRAL_API_KEY in .env.")
+    headers = {
+        "Authorization": f"Bearer {mistral_key}",
+        "Content-Type": "application/json",
+    }
     payload = {
         "model": "mistral-ocr-latest",
         "document": {
@@ -93,7 +135,7 @@ def _ocr_pdf(b64_data: str, custom_key: Optional[str] = None) -> str:
             "document_url": f"data:application/pdf;base64,{b64_data}",
         },
     }
-    resp = requests.post(MISTRAL_OCR_URL, headers=_mistral_headers(custom_key), json=payload, timeout=60)
+    resp = requests.post(MISTRAL_OCR_URL, headers=headers, json=payload, timeout=60)
     resp.raise_for_status()
     data = resp.json()
     pages = data.get("pages", [])
@@ -149,10 +191,11 @@ def run_consult_logic(
     text_prompt += "Respond with the JSON object described in your instructions."
 
     # ------------------------------------------------------------------
-    # 3. Call Mistral
+    # 3. Call LLM (DeepSeek / Mistral / OpenAI-compatible)
     # ------------------------------------------------------------------
     if image_data_uri:
-        model = VISION_MODEL
+        # Vision requests use vision model and if not explicitly configured, route to Mistral vision or custom URL
+        model = get_vision_model()
         user_message = {
             "role": "user",
             "content": [
@@ -160,9 +203,13 @@ def run_consult_logic(
                 {"type": "image_url", "image_url": image_data_uri},
             ],
         }
+        chat_url = os.getenv("VISION_CHAT_URL") or (
+            MISTRAL_CHAT_URL if "pixtral" in model.lower() else get_llm_chat_url()
+        )
     else:
-        model = TEXT_MODEL
+        model = get_text_model()
         user_message = {"role": "user", "content": text_prompt}
+        chat_url = get_llm_chat_url()
 
     # Build messages list: system → prior history (last 10 turns) → current message
     history_messages = []
@@ -183,8 +230,8 @@ def run_consult_logic(
         "max_tokens": 1200,
     }
 
-    headers = _mistral_headers(api_key)
-    resp = requests.post(MISTRAL_CHAT_URL, headers=headers, json=payload, timeout=60)
+    headers = get_llm_headers(api_key)
+    resp = requests.post(chat_url, headers=headers, json=payload, timeout=60)
     resp.raise_for_status()
 
     data = resp.json()

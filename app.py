@@ -166,6 +166,17 @@ class PDFExportRequest(BaseModel):
     metrics: Dict[str, Any]
 
 
+class GenerateReportRequest(BaseModel):
+    modality: str  # "brain-mri", "knee-xray", or "kidney-ultrasound"
+    patient_info: PatientInfo
+    prediction_data: Dict[str, Any]
+
+
+class GenerateReportResponse(BaseModel):
+    report: str
+    used_ai: bool = True
+
+
 # ---------------------------------------------------------------------------
 # System Endpoints
 # ---------------------------------------------------------------------------
@@ -229,6 +240,57 @@ def export_pdf(
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"PDF generation failed: {str(e)}")
+
+
+@app.post("/generate/report", response_model=GenerateReportResponse)
+def generate_clinical_report(
+    req: GenerateReportRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Uses the AI Explainability Engine (DeepSeek / Mistral / LLM) to generate
+    a comprehensive, professional 5-section radiological medical report.
+    """
+    patient_dict = req.patient_info.model_dump()
+    explainer = get_explainer_api()
+
+    try:
+        if req.modality in ("brain-mri", "tumor"):
+            pred_class = req.prediction_data.get("predicted_class", "unknown")
+            conf = float(req.prediction_data.get("confidence", 0.0))
+            area_mm2 = req.prediction_data.get("tumor_area_mm2")
+            area_cm2 = req.prediction_data.get("tumor_area_cm2")
+            report_text = explainer.generate_tumor_report(
+                predicted_class=pred_class,
+                confidence=conf,
+                patient_info=patient_dict,
+                area_mm2=area_mm2,
+                area_cm2=area_cm2,
+            )
+        elif req.modality in ("knee-xray", "knee"):
+            pred_grade = int(req.prediction_data.get("predicted_grade", 0))
+            conf = float(req.prediction_data.get("confidence", 0.0))
+            report_text = explainer.generate_knee_report(
+                predicted_grade=pred_grade,
+                confidence=conf,
+                patient_info=patient_dict,
+            )
+        elif req.modality in ("kidney-ultrasound", "kidney"):
+            length_cm = float(req.prediction_data.get("length_cm", 10.0))
+            width_cm = float(req.prediction_data.get("width_cm", 5.0))
+            thickness_cm = float(req.prediction_data.get("thickness_cm", 4.0))
+            report_text = explainer.generate_kidney_report(
+                length_cm=length_cm,
+                width_cm=width_cm,
+                thickness_cm=thickness_cm,
+                patient_info=patient_dict,
+            )
+        else:
+            raise HTTPException(status_code=400, detail=f"Unsupported modality '{req.modality}'.")
+
+        return GenerateReportResponse(report=report_text, used_ai=True)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"AI Report generation failed: {str(e)}")
 
 
 # ---------------------------------------------------------------------------
@@ -370,7 +432,9 @@ async def consult(
     symptoms: str = Form(""),
     file: Optional[UploadFile] = File(None),
     api_key: Optional[str] = Form(None),
-    x_api_key: Optional[str] = Header(None, alias="X-Mistral-Api-Key"),
+    x_api_key: Optional[str] = Header(None, alias="X-API-Key"),
+    x_llm_api_key: Optional[str] = Header(None, alias="X-LLM-Api-Key"),
+    x_mistral_api_key: Optional[str] = Header(None, alias="X-Mistral-Api-Key"),
     current_user: dict = Depends(get_current_user)
 ):
     if not symptoms and not file:
@@ -382,7 +446,7 @@ async def consult(
         file_bytes = await file.read()
         content_type = file.content_type or ""
 
-    effective_key = api_key or x_api_key
+    effective_key = api_key or x_api_key or x_llm_api_key or x_mistral_api_key
 
     try:
         res = run_consult_logic(symptoms, file_bytes, content_type, api_key=effective_key)
