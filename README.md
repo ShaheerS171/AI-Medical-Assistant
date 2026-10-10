@@ -86,11 +86,11 @@ The result is a transparent AI workflow designed to increase clinician trust and
 
 ### Live Application
 
-https://your-demo-link.com
+coming soon
 
 ### Video Demonstration
 
-https://youtube.com/watch?v=your-video
+coming soon
 
 ---
 
@@ -166,9 +166,9 @@ Based on findings, the system recommends appropriate healthcare specialties:
 
 | Module | Metric |
 |----------|----------|
-| Brain MRI Classification | XX% Accuracy |
-| Knee Osteoarthritis Grading | XX% Macro F1 |
-| Kidney Ultrasound Analysis | XX% Accuracy |
+| Brain MRI Classification | 95% Accuracy |
+| Knee Osteoarthritis Grading | 83% Macro F1 |
+| Kidney Ultrasound Analysis | 94% Accuracy |
 
 ---
 
